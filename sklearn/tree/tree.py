@@ -61,10 +61,13 @@ CRITERIA_REG = {"mse": _criterion.MSE, "friedman_mse": _criterion.FriedmanMSE,
                 "mae": _criterion.MAE}
 
 DENSE_SPLITTERS = {"best": _splitter.BestSplitter,
-                   "random": _splitter.RandomSplitter}
+                   "random": _splitter.RandomSplitter,
+                   "smart": _splitter.SmartSplitter}
 
 SPARSE_SPLITTERS = {"best": _splitter.BestSparseSplitter,
                     "random": _splitter.RandomSparseSplitter}
+
+MAX_CATEGORICAL_LABEL = 64
 
 # =============================================================================
 # Base decision tree
@@ -106,7 +109,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator)):
         self.presort = presort
 
     def fit(self, X, y, sample_weight=None, check_input=True,
-            X_idx_sorted=None):
+            X_idx_sorted=None, categorical_features=None):
 
         random_state = check_random_state(self.random_state)
         if check_input:
@@ -303,6 +306,25 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator)):
                              ".shape = {})".format(X.shape,
                                                    X_idx_sorted.shape))
 
+        if categorical_features:
+            if max(categorical_features) >= self.n_features_:
+                raise ValueError("Categorical feature indices are out of the "
+                                 "range; there are only {} features.".format(
+                    self.n_features_))
+
+            for f_idx in categorical_features:
+                uniq_values = set(map(int, X[:, f_idx]))
+
+                if max(uniq_values) + 1 > MAX_CATEGORICAL_LABEL:
+                    raise ValueError("The cardinality ({}) of feature {} is too "
+                                     "high > {}.".format(max(uniq_values) + 1, f_idx,
+                                                         MAX_CATEGORICAL_LABEL))
+
+                if set(uniq_values) != set(range(max(uniq_values) + 1)):
+                    raise ValueError("Categorical features should go through"
+                                     "LabelEncoder first.")
+
+        #
         # Build tree
         criterion = self.criterion
         if not isinstance(criterion, Criterion):
@@ -317,6 +339,8 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator)):
 
         splitter = self.splitter
         if not isinstance(self.splitter, Splitter):
+            if self.splitter not in SPLITTERS:
+                raise ValueError("Unknown splitter '%s' in this use case." % self.splitter)
             splitter = SPLITTERS[self.splitter](criterion,
                                                 self.max_features_,
                                                 min_samples_leaf,
@@ -340,7 +364,10 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator)):
                                            max_leaf_nodes,
                                            self.min_impurity_split)
 
-        builder.build(self.tree_, X, y, sample_weight, X_idx_sorted)
+        if categorical_features is not None:
+            categorical_features = np.asfortranarray(categorical_features)
+
+        builder.build(self.tree_, X, y, sample_weight, X_idx_sorted, categorical_features)
 
         if self.n_outputs_ == 1:
             self.n_classes_ = self.n_classes_[0]
@@ -688,7 +715,7 @@ class DecisionTreeClassifier(BaseDecisionTree, ClassifierMixin):
             presort=presort)
 
     def fit(self, X, y, sample_weight=None, check_input=True,
-            X_idx_sorted=None):
+            X_idx_sorted=None, categorical_features=None):
         """Build a decision tree classifier from the training set (X, y).
 
         Parameters
@@ -718,6 +745,9 @@ class DecisionTreeClassifier(BaseDecisionTree, ClassifierMixin):
             cached between trees. If None, the data will be sorted here.
             Don't use this parameter unless you know what to do.
 
+        categorical_features : array, optional
+            A list of indices of categorical features.
+
         Returns
         -------
         self : object
@@ -728,7 +758,8 @@ class DecisionTreeClassifier(BaseDecisionTree, ClassifierMixin):
             X, y,
             sample_weight=sample_weight,
             check_input=check_input,
-            X_idx_sorted=X_idx_sorted)
+            X_idx_sorted=X_idx_sorted,
+            categorical_features=categorical_features)
         return self
 
     def predict_proba(self, X, check_input=True):
@@ -826,8 +857,11 @@ class DecisionTreeRegressor(BaseDecisionTree, RegressorMixin):
 
     splitter : string, optional (default="best")
         The strategy used to choose the split at each node. Supported
-        strategies are "best" to choose the best split and "random" to choose
-        the best random split.
+        strategies are
+            - "best" to choose the best split;
+            - "random" to choose the best random split;
+            - "smart" to choose the best split with smart treatment of
+            categorical features beased on local response proportion.
 
     max_features : int, float, string or None, optional (default=None)
         The number of features to consider when looking for the best split:
@@ -979,7 +1013,7 @@ class DecisionTreeRegressor(BaseDecisionTree, RegressorMixin):
             presort=presort)
 
     def fit(self, X, y, sample_weight=None, check_input=True,
-            X_idx_sorted=None):
+            X_idx_sorted=None, categorical_features=None):
         """Build a decision tree regressor from the training set (X, y).
 
         Parameters
@@ -1008,6 +1042,9 @@ class DecisionTreeRegressor(BaseDecisionTree, RegressorMixin):
             cached between trees. If None, the data will be sorted here.
             Don't use this parameter unless you know what to do.
 
+        categorical_features : array, optional
+            A list of indices of categorical features.
+
         Returns
         -------
         self : object
@@ -1018,7 +1055,8 @@ class DecisionTreeRegressor(BaseDecisionTree, RegressorMixin):
             X, y,
             sample_weight=sample_weight,
             check_input=check_input,
-            X_idx_sorted=X_idx_sorted)
+            X_idx_sorted=X_idx_sorted,
+            categorical_features=categorical_features)
         return self
 
 
