@@ -106,7 +106,7 @@ def test_classifier_partial_fit():
 
 def test_classifier_refit():
     # Classifier can be retrained on different labels and features.
-    clf = PassiveAggressiveClassifier().fit(X, y)
+    clf = PassiveAggressiveClassifier(random_state=42).fit(X, y)
     assert_array_equal(clf.classes_, np.unique(y))
 
     clf.fit(X[:, :-1], iris.target_names[y])
@@ -122,21 +122,23 @@ def test_classifier_correctness():
         clf1 = MyPassiveAggressive(C=1.0,
                                    loss=loss,
                                    fit_intercept=True,
-                                   n_iter=2)
+                                   n_iter=2,
+                                   random_state=42)
         clf1.fit(X, y_bin)
 
         for data in (X, X_csr):
             clf2 = PassiveAggressiveClassifier(C=1.0,
                                                loss=loss,
                                                fit_intercept=True,
-                                               n_iter=2, shuffle=False)
+                                               n_iter=2, shuffle=False,
+                                               random_state=42)
             clf2.fit(data, y_bin)
 
             assert_array_almost_equal(clf1.w, clf2.coef_.ravel(), decimal=2)
 
 
 def test_classifier_undefined_methods():
-    clf = PassiveAggressiveClassifier()
+    clf = PassiveAggressiveClassifier(random_state=42)
     for meth in ("predict_proba", "predict_log_proba", "transform"):
         assert_raises(AttributeError, lambda x: getattr(clf, x), meth)
 
@@ -165,23 +167,27 @@ def test_class_weights():
 
 def test_partial_fit_weight_class_balanced():
     # partial_fit with class_weight='balanced' not supported
-    clf = PassiveAggressiveClassifier(class_weight="balanced")
+    clf = PassiveAggressiveClassifier(class_weight="balanced",
+                                      random_state=42)
     assert_raises(ValueError, clf.partial_fit, X, y, classes=np.unique(y))
 
 
 def test_equal_class_weight():
     X2 = [[1, 0], [1, 0], [0, 1], [0, 1]]
     y2 = [0, 0, 1, 1]
-    clf = PassiveAggressiveClassifier(C=0.1, n_iter=1000, class_weight=None)
+    clf = PassiveAggressiveClassifier(C=0.1, n_iter=1000, class_weight=None,
+                                      random_state=42)
     clf.fit(X2, y2)
 
     # Already balanced, so "balanced" weights should have no effect
     clf_balanced = PassiveAggressiveClassifier(C=0.1, n_iter=1000,
-                                               class_weight="balanced")
+                                               class_weight="balanced",
+                                               random_state=42)
     clf_balanced.fit(X2, y2)
 
     clf_weighted = PassiveAggressiveClassifier(C=0.1, n_iter=1000,
-                                               class_weight={0: 0.5, 1: 0.5})
+                                               class_weight={0: 0.5, 1: 0.5},
+                                               random_state=42)
     clf_weighted.fit(X2, y2)
 
     # should be similar up to some epsilon due to learning rate schedule
@@ -195,7 +201,7 @@ def test_wrong_class_weight_label():
                    [1.0, 1.0], [1.0, 0.0]])
     y2 = [1, 1, 1, -1, -1]
 
-    clf = PassiveAggressiveClassifier(class_weight={0: 0.5})
+    clf = PassiveAggressiveClassifier(class_weight={0: 0.5}, random_state=42)
     assert_raises(ValueError, clf.fit, X2, y2)
 
 
@@ -205,10 +211,11 @@ def test_wrong_class_weight_format():
                    [1.0, 1.0], [1.0, 0.0]])
     y2 = [1, 1, 1, -1, -1]
 
-    clf = PassiveAggressiveClassifier(class_weight=[0.5])
+    clf = PassiveAggressiveClassifier(class_weight=[0.5], random_state=42)
     assert_raises(ValueError, clf.fit, X2, y2)
 
-    clf = PassiveAggressiveClassifier(class_weight="the larch")
+    clf = PassiveAggressiveClassifier(class_weight="the larch",
+                                      random_state=42)
     assert_raises(ValueError, clf.fit, X2, y2)
 
 
@@ -262,20 +269,22 @@ def test_regressor_correctness():
         reg1 = MyPassiveAggressive(C=1.0,
                                    loss=loss,
                                    fit_intercept=True,
-                                   n_iter=2)
+                                   n_iter=2,
+                                   random_state=42)
         reg1.fit(X, y_bin)
 
         for data in (X, X_csr):
             reg2 = PassiveAggressiveRegressor(C=1.0,
                                               loss=loss,
                                               fit_intercept=True,
-                                              n_iter=2, shuffle=False)
+                                              n_iter=2, shuffle=False,
+                                              random_state=42)
             reg2.fit(data, y_bin)
 
             assert_array_almost_equal(reg1.w, reg2.coef_.ravel(), decimal=2)
 
 
 def test_regressor_undefined_methods():
-    reg = PassiveAggressiveRegressor()
+    reg = PassiveAggressiveRegressor(random_state=42)
     for meth in ("transform",):
         assert_raises(AttributeError, lambda x: getattr(reg, x), meth)
