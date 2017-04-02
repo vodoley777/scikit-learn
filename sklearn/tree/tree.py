@@ -109,9 +109,10 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator)):
             X_idx_sorted=None):
 
         random_state = check_random_state(self.random_state)
+
         if check_input:
             X = check_array(X, dtype=DTYPE, accept_sparse="csc")
-            y = check_array(y, ensure_2d=False, dtype=None)
+            y = check_array(y, ensure_2d=False, dtype=None, variable_name='y')
             if issparse(X):
                 X.sort_indices()
 
@@ -566,7 +567,8 @@ class DecisionTreeClassifier(BaseDecisionTree, ClassifierMixin):
         Best nodes are defined as relative reduction in impurity.
         If None then unlimited number of leaf nodes.
 
-    class_weight : dict, list of dicts, "balanced" or None, optional (default=None)
+    class_weight : dict, list of dicts, "balanced" or None, optional
+        (default=None)
         Weights associated with classes in the form ``{class_label: weight}``.
         If not given, all classes are supposed to have weight one. For
         multi-output problems, a list of dicts can be provided in the same
