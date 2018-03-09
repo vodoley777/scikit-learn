@@ -144,12 +144,11 @@ class BaseLibSVM(six.with_metaclass(ABCMeta, BaseEstimator)):
             raise TypeError("Sparse precomputed kernels are not supported.")
         self._sparse = sparse and not callable(self.kernel)
 
-        X, y = check_X_y(X, y, dtype=np.float64, order='C', accept_sparse='csr')
-        y = self._validate_targets(y)
-
         sample_weight = np.asarray([]
                                    if sample_weight is None
                                    else sample_weight, dtype=np.float64)
+        X, y = check_X_y(X, y, dtype=np.float64, order='C',
+                         accept_sparse='csr')
         solver_type = LIBSVM_IMPL.index(self._impl)
 
         # input validation
@@ -167,6 +166,8 @@ class BaseLibSVM(six.with_metaclass(ABCMeta, BaseEstimator)):
                              "Note: Sparse matrices cannot be indexed w/"
                              "boolean masks (use `indices=True` in CV)."
                              % (sample_weight.shape, X.shape))
+
+        y = self._validate_targets(y, sample_weight)
 
         if self.gamma == 'auto':
             self._gamma = 1.0 / X.shape[1]
@@ -197,7 +198,7 @@ class BaseLibSVM(six.with_metaclass(ABCMeta, BaseEstimator)):
 
         return self
 
-    def _validate_targets(self, y):
+    def _validate_targets(self, y, sample_weight):
         """Validation of y and class_weight.
 
         Default implementation for SVR and one-class; overridden in BaseSVC.
@@ -484,10 +485,13 @@ class BaseSVC(six.with_metaclass(ABCMeta, BaseLibSVM, ClassifierMixin)):
             class_weight=class_weight, verbose=verbose, max_iter=max_iter,
             random_state=random_state)
 
-    def _validate_targets(self, y):
+    def _validate_targets(self, y, sample_weight):
         y_ = column_or_1d(y, warn=True)
         check_classification_targets(y)
         cls, y = np.unique(y_, return_inverse=True)
+        if sample_weight.shape[0]:
+            y_ = y_[sample_weight > 0]
+            cls = np.unique(y_)
         self.class_weight_ = compute_class_weight(self.class_weight, cls, y_)
         if len(cls) < 2:
             raise ValueError(
