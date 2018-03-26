@@ -1229,11 +1229,11 @@ class BaseGradientBoosting(six.with_metaclass(ABCMeta, BaseEnsemble)):
 
         total_sum = np.zeros((self.n_features_, ), dtype=np.float64)
         for stage in self.estimators_:
-            stage_sum = sum(tree.feature_importances_
+            stage_sum = sum(tree._compute_feature_importances(normalize=False)
                             for tree in stage) / len(stage)
             total_sum += stage_sum
 
-        importances = total_sum / len(self.estimators_)
+        importances = total_sum / sum(total_sum)
         return importances
 
     def _validate_y(self, y, sample_weight):
