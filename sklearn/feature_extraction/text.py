@@ -11,7 +11,7 @@
 The :mod:`sklearn.feature_extraction.text` submodule gathers utilities to
 build feature vectors from text documents.
 """
-from __future__ import unicode_literals
+from __future__ import unicode_literals, division
 
 import array
 from collections import Mapping, defaultdict
@@ -1110,7 +1110,8 @@ class TfidfTransformer(BaseEstimator, TransformerMixin):
         self.sublinear_tf = sublinear_tf
 
     def fit(self, X, y=None):
-        """Learn the idf vector (global term weights)
+        """Learn the df vector (global term weights).
+        It is used to calculate the idf scores for the terms.
 
         Parameters
         ----------
@@ -1120,18 +1121,44 @@ class TfidfTransformer(BaseEstimator, TransformerMixin):
         if not sp.issparse(X):
             X = sp.csc_matrix(X)
         if self.use_idf:
-            n_samples, n_features = X.shape
-            df = _document_frequency(X)
+            self._n_samples, n_features = X.shape
+            self._df = _document_frequency(X)
 
             # perform idf smoothing if required
-            df += int(self.smooth_idf)
-            n_samples += int(self.smooth_idf)
+            self._df += int(self.smooth_idf)
+            self._n_samples += int(self.smooth_idf)
 
-            # log+1 instead of log makes sure terms with zero idf don't get
-            # suppressed entirely.
-            idf = np.log(float(n_samples) / df) + 1.0
-            self._idf_diag = sp.spdiags(idf, diags=0, m=n_features,
-                                        n=n_features, format='csr')
+        return self
+
+    def partial_fit(self, X, y=None):
+        """Update the df vector (global term weights),
+        which is used to calculate the idf scores for the terms.
+        This method should only be called after `fit` since it
+        is supposed to not change the number of features.
+
+        Parameters
+        ----------
+        X : sparse matrix, [n_samples, n_features]
+            a matrix of term/token counts
+        """
+
+        if not hasattr(self, '_df'):
+            raise ValueError("fit should be called before partial_fit")
+
+        if not sp.issparse(X):
+            X = sp.csc_matrix(X)
+        if self.use_idf:
+            n_samples, n_features = X.shape
+
+            expected_n_features = self._df.shape[0]
+            if n_features != expected_n_features:
+                raise ValueError("The update input has n_features=%d while"
+                                 " the model has been trained with n_features="
+                                 "%d" % (n_features, expected_n_features))
+
+            df = _document_frequency(X)
+            self._df += df
+            self._n_samples += n_samples
 
         return self
 
@@ -1165,15 +1192,19 @@ class TfidfTransformer(BaseEstimator, TransformerMixin):
             X.data += 1
 
         if self.use_idf:
-            check_is_fitted(self, '_idf_diag', 'idf vector is not fitted')
+            check_is_fitted(self, '_df', 'df vector is not fitted')
 
-            expected_n_features = self._idf_diag.shape[0]
+            expected_n_features = self._df.shape[0]
             if n_features != expected_n_features:
                 raise ValueError("Input has n_features=%d while the model"
                                  " has been trained with n_features=%d" % (
                                      n_features, expected_n_features))
+
+            idf_diag = sp.spdiags(self.idf_, diags=0, m=n_features,
+                                  n=n_features, format='csr')
+
             # *= doesn't work
-            X = X * self._idf_diag
+            X = X * idf_diag
 
         if self.norm:
             X = normalize(X, norm=self.norm, copy=False)
@@ -1182,9 +1213,7 @@ class TfidfTransformer(BaseEstimator, TransformerMixin):
 
     @property
     def idf_(self):
-        # if _idf_diag is not set, this will raise an attribute error,
-        # which means hasattr(self, "idf_") is False
-        return np.ravel(self._idf_diag.sum(axis=0))
+        return np.log(self._n_samples / self._df) + 1.0
 
     @idf_.setter
     def idf_(self, value):
