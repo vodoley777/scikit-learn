@@ -145,7 +145,7 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
     def __init__(self, C=1.0, fit_intercept=True, max_iter=None, tol=None,
                  shuffle=True, verbose=0, loss="hinge", n_jobs=1,
                  random_state=None, warm_start=False, class_weight=None,
-                 average=False, n_iter=None):
+                 average=False, n_iter=None, iters=1):
         super(PassiveAggressiveClassifier, self).__init__(
             penalty=None,
             fit_intercept=fit_intercept,
@@ -159,7 +159,8 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
             class_weight=class_weight,
             average=average,
             n_jobs=n_jobs,
-            n_iter=n_iter)
+            n_iter=n_iter,
+            iters=iters)
 
         self.C = C
         self.loss = loss
@@ -199,9 +200,10 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
                              "parameter.")
         lr = "pa1" if self.loss == "hinge" else "pa2"
         return self._partial_fit(X, y, alpha=1.0, C=self.C,
-                                 loss="hinge", learning_rate=lr, max_iter=1,
-                                 classes=classes, sample_weight=None,
-                                 coef_init=None, intercept_init=None)
+                                 loss="hinge", learning_rate=lr,
+                                 max_iter=self.iters, classes=classes,
+                                 sample_weight=None, coef_init=None,
+                                 intercept_init=None)
 
     def fit(self, X, y, coef_init=None, intercept_init=None):
         """Fit linear model with Passive Aggressive algorithm.
@@ -329,7 +331,7 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
     >>> regr = PassiveAggressiveRegressor(random_state=0)
     >>> regr.fit(X, y)
     PassiveAggressiveRegressor(C=1.0, average=False, epsilon=0.1,
-                  fit_intercept=True, loss='epsilon_insensitive',
+                  fit_intercept=True, iters=1, loss='epsilon_insensitive',
                   max_iter=None, n_iter=None, random_state=0, shuffle=True,
                   tol=None, verbose=0, warm_start=False)
     >>> print(regr.coef_)
@@ -354,7 +356,7 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
     def __init__(self, C=1.0, fit_intercept=True, max_iter=None, tol=None,
                  shuffle=True, verbose=0, loss="epsilon_insensitive",
                  epsilon=DEFAULT_EPSILON, random_state=None, warm_start=False,
-                 average=False, n_iter=None):
+                 average=False, n_iter=None, iters=1):
         super(PassiveAggressiveRegressor, self).__init__(
             penalty=None,
             l1_ratio=0,
@@ -368,7 +370,8 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
             random_state=random_state,
             warm_start=warm_start,
             average=average,
-            n_iter=n_iter)
+            n_iter=n_iter,
+            iters=iters)
         self.C = C
         self.loss = loss
 
@@ -391,7 +394,7 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
         lr = "pa1" if self.loss == "epsilon_insensitive" else "pa2"
         return self._partial_fit(X, y, alpha=1.0, C=self.C,
                                  loss="epsilon_insensitive",
-                                 learning_rate=lr, max_iter=1,
+                                 learning_rate=lr, max_iter=self.iters,
                                  sample_weight=None,
                                  coef_init=None, intercept_init=None)
 
