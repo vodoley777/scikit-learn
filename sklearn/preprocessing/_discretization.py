@@ -14,6 +14,7 @@ import warnings
 from . import OneHotEncoder
 
 from ..base import BaseEstimator, TransformerMixin
+from ..utils import safe_repr
 from ..utils.validation import check_array
 from ..utils.validation import check_is_fitted
 from ..utils.validation import FLOAT_DTYPES
@@ -140,13 +141,13 @@ class KBinsDiscretizer(BaseEstimator, TransformerMixin):
         valid_encode = ('onehot', 'onehot-dense', 'ordinal')
         if self.encode not in valid_encode:
             raise ValueError("Valid options for 'encode' are {}. "
-                             "Got encode={!r} instead."
-                             .format(valid_encode, self.encode))
+                             "Got encode={!s} instead."
+                             .format(valid_encode, safe_repr(self.encode)))
         valid_strategy = ('uniform', 'quantile', 'kmeans')
         if self.strategy not in valid_strategy:
             raise ValueError("Valid options for 'strategy' are {}. "
-                             "Got strategy={!r} instead."
-                             .format(valid_strategy, self.strategy))
+                             "Got strategy={!s} instead."
+                             .format(valid_strategy, safe_repr(self.strategy)))
 
         n_features = X.shape[1]
         n_bins = self._validate_n_bins(n_features)

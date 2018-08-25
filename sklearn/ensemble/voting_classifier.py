@@ -21,7 +21,7 @@ from ..preprocessing import LabelEncoder
 from ..utils import Parallel, delayed
 from ..utils.validation import has_fit_parameter, check_is_fitted
 from ..utils.metaestimators import _BaseComposition
-from ..utils import Bunch
+from ..utils import Bunch, safe_repr
 
 
 def _parallel_fit_estimator(estimator, X, y, sample_weight=None):
@@ -161,8 +161,8 @@ class VotingClassifier(_BaseComposition, ClassifierMixin, TransformerMixin):
                                       ' classification is not supported.')
 
         if self.voting not in ('soft', 'hard'):
-            raise ValueError("Voting must be 'soft' or 'hard'; got (voting=%r)"
-                             % self.voting)
+            raise ValueError("Voting must be 'soft' or 'hard'; got (voting=%s)"
+                             % safe_repr(self.voting))
 
         if self.estimators is None or len(self.estimators) == 0:
             raise AttributeError('Invalid `estimators` attribute, `estimators`'

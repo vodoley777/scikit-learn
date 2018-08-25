@@ -18,7 +18,7 @@ import warnings
 
 from ..base import BaseEstimator, TransformerMixin
 from ..utils import (check_random_state, check_array,
-                     gen_batches, gen_even_slices)
+                     gen_batches, gen_even_slices, safe_repr)
 from ..utils.fixes import logsumexp
 from ..utils.validation import check_non_negative
 from ..utils import Parallel, delayed, effective_n_jobs
@@ -328,8 +328,8 @@ class LatentDirichletAllocation(BaseEstimator, TransformerMixin):
                              % self.learning_offset)
 
         if self.learning_method not in ("batch", "online"):
-            raise ValueError("Invalid 'learning_method' parameter: %r"
-                             % self.learning_method)
+            raise ValueError("Invalid 'learning_method' parameter: %s"
+                             % safe_repr(self.learning_method))
 
     def _init_latent_vars(self, n_features):
         """Initialize latent variables."""
