@@ -20,10 +20,14 @@ from scipy.sparse import csr_matrix
 
 from sklearn.tree._tree cimport Node
 from sklearn.tree._tree cimport Tree
+from sklearn.tree._tree cimport CategoryCacheMgr
 from sklearn.tree._tree cimport DTYPE_t
 from sklearn.tree._tree cimport SIZE_t
 from sklearn.tree._tree cimport INT32_t
+from sklearn.tree._tree cimport UINT32_t
+from sklearn.tree._tree cimport BITSET_t
 from sklearn.tree._utils cimport safe_realloc
+from sklearn.tree._utils cimport goes_left
 
 ctypedef np.int32_t int32
 ctypedef np.float64_t float64
@@ -48,6 +52,8 @@ cdef void _predict_regression_tree_inplace_fast_dense(DTYPE_t *X,
                                                       Py_ssize_t K,
                                                       Py_ssize_t n_samples,
                                                       Py_ssize_t n_features,
+                                                      INT32_t* n_categories,
+                                                      BITSET_t** cachebits,
                                                       float64 *out):
     """Predicts output for regression tree and stores it in ``out[i, k]``.
 
@@ -82,6 +88,12 @@ cdef void _predict_regression_tree_inplace_fast_dense(DTYPE_t *X,
         ``n_samples == X.shape[0]``.
     n_features : int
         The number of features; ``n_samples == X.shape[1]``.
+    n_categories : INT32_t pointer
+        Array of length n_features containing the number of categories
+        (for categorical features) or -1 (for non-categorical features)
+    cachebits : BITSET_t pointer pointer
+        Array of length node_count containing category cache buffers
+        for categorical features
     out : np.float64_t pointer
         The pointer to the data array where the predictions are stored.
         ``out`` is assumed to be a two-dimensional array of
@@ -89,13 +101,19 @@ cdef void _predict_regression_tree_inplace_fast_dense(DTYPE_t *X,
     """
     cdef Py_ssize_t i
     cdef Node *node
+    cdef BITSET_t* node_cache
+
     for i in range(n_samples):
         node = root_node
+        node_cache = cachebits[0]
         # While node not a leaf
         while node.left_child != TREE_LEAF:
-            if X[i * n_features + node.feature] <= node.threshold:
+            if goes_left(X[i * n_features + node.feature], node.split_value,
+                         n_categories[node.feature], node_cache):
+                node_cache = cachebits[node.left_child]
                 node = root_node + node.left_child
             else:
+                node_cache = cachebits[node.right_child]
                 node = root_node + node.right_child
         out[i * K + k] += scale * value[node - root_node]
 
@@ -130,8 +148,8 @@ def _predict_regression_tree_stages_sparse(np.ndarray[object, ndim=2] estimators
     cdef Tree tree
     cdef Node** nodes = NULL
     cdef double** values = NULL
-    safe_realloc(&nodes, n_stages * n_outputs)
-    safe_realloc(&values, n_stages * n_outputs)
+    safe_realloc(<void ***>&nodes, n_stages * n_outputs, sizeof(void*))
+    safe_realloc(<void ***>&values, n_stages * n_outputs, sizeof(void*))
     for stage_i in range(n_stages):
         for output_i in range(n_outputs):
             tree = estimators[stage_i, output_i].tree_
@@ -147,8 +165,8 @@ def _predict_regression_tree_stages_sparse(np.ndarray[object, ndim=2] estimators
     # which features are nonzero in the present sample.
     cdef SIZE_t* feature_to_sample = NULL
 
-    safe_realloc(&X_sample, n_features)
-    safe_realloc(&feature_to_sample, n_features)
+    safe_realloc(&X_sample, n_features, sizeof(DTYPE_t))
+    safe_realloc(&feature_to_sample, n_features, sizeof(SIZE_t))
 
     memset(feature_to_sample, -1, n_features * sizeof(SIZE_t))
 
@@ -174,7 +192,7 @@ def _predict_regression_tree_stages_sparse(np.ndarray[object, ndim=2] estimators
                     else:
                         feature_value = 0.
 
-                    if feature_value <= node.threshold:
+                    if feature_value <= node.split_value.threshold:
                         node = root_node + node.left_child
                     else:
                         node = root_node + node.right_child
@@ -216,6 +234,10 @@ def predict_stages(np.ndarray[object, ndim=2] estimators,
             for k in range(K):
                 tree = estimators[i, k].tree_
 
+                # Make category cache buffers for this tree's nodes
+                cache_mgr = CategoryCacheMgr()
+                cache_mgr.populate(tree.nodes, tree.node_count, tree.n_categories)
+
                 # avoid buffer validation by casting to ndarray
                 # and get data pointer
                 # need brackets because of casting operator priority
@@ -223,6 +245,7 @@ def predict_stages(np.ndarray[object, ndim=2] estimators,
                     <DTYPE_t*> (<np.ndarray> X).data,
                     tree.nodes, tree.value,
                     scale, k, K, X.shape[0], X.shape[1],
+                    tree.n_categories, cache_mgr.bits,
                     <float64 *> (<np.ndarray> out).data)
                 ## out += scale * tree.predict(X).reshape((X.shape[0], 1))
 
@@ -293,27 +316,34 @@ cpdef _partial_dependence_tree(Tree tree, DTYPE_t[:, ::1] X,
     cdef SIZE_t node_count = tree.node_count
 
     cdef SIZE_t stack_capacity = node_count * 2
-    cdef Node **node_stack
     cdef double[::1] weight_stack = np_ones((stack_capacity,), dtype=np_float64)
     cdef SIZE_t stack_size = 1
     cdef double left_sample_frac
     cdef double current_weight
     cdef double total_weight = 0.0
     cdef Node *current_node
-    underlying_stack = np_zeros((stack_capacity,), dtype=np.intp)
-    node_stack = <Node **>(<np.ndarray> underlying_stack).data
+    cdef SIZE_t[::1] node_stack = np_zeros((stack_capacity,), dtype=np.intp)
+    cdef BITSET_t** cachebits
+    cdef BITSET_t* node_cache
+
+    # Make category cache buffers for this tree's nodes
+    cache_mgr = CategoryCacheMgr()
+    cache_mgr.populate(root_node, node_count, tree.n_categories)
+    cachebits = cache_mgr.bits
 
     for i in range(X.shape[0]):
         # init stacks for new example
         stack_size = 1
-        node_stack[0] = root_node
+        node_stack[0] = 0
+        node_cache = cachebits[0]
         weight_stack[0] = 1.0
         total_weight = 0.0
 
         while stack_size > 0:
             # get top node on stack
             stack_size -= 1
-            current_node = node_stack[stack_size]
+            current_node = root_node + node_stack[stack_size]
+            node_cache = cachebits[node_stack[stack_size]]
 
             if current_node.left_child == TREE_LEAF:
                 out[i] += weight_stack[stack_size] * value[current_node - root_node] * \
@@ -325,21 +355,21 @@ cpdef _partial_dependence_tree(Tree tree, DTYPE_t[:, ::1] X,
                 if feature_index != -1:
                     # split feature in target set
                     # push left or right child on stack
-                    if X[i, feature_index] <= current_node.threshold:
+                    if goes_left(X[i, feature_index], current_node.split_value,
+                                 tree.n_categories[current_node.feature],
+                                 node_cache):
                         # left
-                        node_stack[stack_size] = (root_node +
-                                                  current_node.left_child)
+                        node_stack[stack_size] = current_node.left_child
                     else:
                         # right
-                        node_stack[stack_size] = (root_node +
-                                                  current_node.right_child)
+                        node_stack[stack_size] = current_node.right_child
                     stack_size += 1
                 else:
                     # split feature in complement set
                     # push both children onto stack
 
                     # push left child
-                    node_stack[stack_size] = root_node + current_node.left_child
+                    node_stack[stack_size] = current_node.left_child
                     current_weight = weight_stack[stack_size]
                     left_sample_frac = root_node[current_node.left_child].n_node_samples / \
                                        <double>current_node.n_node_samples
@@ -354,7 +384,7 @@ cpdef _partial_dependence_tree(Tree tree, DTYPE_t[:, ::1] X,
                     stack_size +=1
 
                     # push right child
-                    node_stack[stack_size] = root_node + current_node.right_child
+                    node_stack[stack_size] = current_node.right_child
                     weight_stack[stack_size] = current_weight * \
                                                (1.0 - left_sample_frac)
                     stack_size +=1
