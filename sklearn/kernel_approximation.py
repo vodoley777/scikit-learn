@@ -9,6 +9,8 @@ approximate kernel feature maps base on Fourier transforms.
 
 import warnings
 
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import scipy.sparse as sp
 from scipy.linalg import svd
@@ -19,6 +21,7 @@ from .utils import check_array, check_random_state, as_float_array
 from .utils.extmath import safe_sparse_dot
 from .utils.validation import check_is_fitted
 from .metrics.pairwise import pairwise_kernels, KERNEL_PARAMS
+from .externals import six
 
 
 class RBFSampler(BaseEstimator, TransformerMixin):
@@ -250,7 +253,151 @@ class SkewedChi2Sampler(BaseEstimator, TransformerMixin):
         return projection
 
 
-class AdditiveChi2Sampler(BaseEstimator, TransformerMixin):
+class BaseAdditiveHomogenousKernelSampler(six.with_metaclass(ABCMeta,
+                                                             BaseEstimator,
+                                                             TransformerMixin)
+                                          ):
+    """Base class for additive homogenous kernel samplers."""
+
+    preset_sample_intervals = None
+
+    def __init__(self, sample_steps=2, sample_interval=None):
+        self.sample_steps = sample_steps
+        self.sample_interval = sample_interval
+
+    def fit(self, X, y=None):
+        """Set the parameters
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            Training data, where n_samples in the number of samples
+            and n_features is the number of features.
+
+        Returns
+        -------
+        self : object
+            Returns the transformer.
+        """
+        check_array(X, accept_sparse='csr')
+        if self.sample_interval is None:
+            if not isinstance(self.preset_sample_intervals, dict):
+                raise ValueError("The attribute ``preset_sample_intervals`` "
+                                 "is not defined correctly. Its type is %s "
+                                 "instead of dict. Please check that the "
+                                 "class extending "
+                                 "``BaseAdditiveHomogenousKernelSampler`` "
+                                 "defines ``preset_sample_intervals`` "
+                                 "correctly." %
+                                 type(self.preset_sample_intervals))
+            if self.sample_steps in self.preset_sample_intervals:
+                self.sample_interval_ = \
+                    self.preset_sample_intervals[self.sample_steps]
+            else:
+                raise ValueError("If sample_steps is not in %s,"
+                                 " you need to provide sample_interval" %
+                                 (sorted(self.preset_sample_intervals.keys()))
+                                 )
+        else:
+            self.sample_interval_ = self.sample_interval
+        return self
+
+    def transform(self, X):
+        """Apply approximate feature map to X.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix}, shape = (n_samples, n_features)
+
+        Returns
+        -------
+        X_new : {array, sparse matrix}, \
+               shape = (n_samples, n_features * (2*sample_steps + 1))
+            Whether the return value is an array of sparse matrix depends on
+            the type of the input X.
+        """
+        msg = ("%(name)s is not fitted. Call fit to set the parameters before"
+               " calling transform")
+        check_is_fitted(self, "sample_interval_", msg=msg)
+
+        X = check_array(X, accept_sparse='csr')
+        sparse = sp.issparse(X)
+
+        # check if X has negative values. Doesn't play well with np.log.
+        if ((X.data if sparse else X) < 0).any():
+            raise ValueError("Entries of X must be non-negative.")
+        # zeroth component
+        # 1/cosh = sech
+        # cosh(0) = 1.0
+
+        transf = self._transform_sparse if sparse else self._transform_dense
+        return transf(X)
+
+    @abstractmethod
+    def _spectrum(self, omega):
+        """Spectrum function for kernel"""
+
+    def _transform_dense(self, X):
+        non_zero = (X != 0.0)
+        X_nz = X[non_zero]
+
+        X_step = np.zeros_like(X)
+        X_step[non_zero] = np.sqrt(X_nz * self.sample_interval_ *
+                                   self._spectrum(0))
+
+        X_new = [X_step]
+
+        log_step_nz = self.sample_interval_ * np.log(X_nz)
+        step_nz = 2 * X_nz * self.sample_interval_
+
+        for j in range(1, self.sample_steps):
+            factor_nz = np.sqrt(step_nz *
+                                self._spectrum(j * self.sample_interval_))
+
+            X_step = np.zeros_like(X)
+            X_step[non_zero] = factor_nz * np.cos(j * log_step_nz)
+            X_new.append(X_step)
+
+            X_step = np.zeros_like(X)
+            X_step[non_zero] = factor_nz * np.sin(j * log_step_nz)
+            X_new.append(X_step)
+
+        return np.hstack(X_new)
+
+    def _transform_sparse(self, X):
+        indices = X.indices.copy()
+        indptr = X.indptr.copy()
+
+        data_step = np.sqrt(X.data * self.sample_interval_ *
+                            self._spectrum(0))
+        X_step = sp.csr_matrix((data_step, indices, indptr),
+                               shape=X.shape, dtype=X.dtype, copy=False)
+        X_new = [X_step]
+
+        log_step_nz = self.sample_interval_ * np.log(X.data)
+        step_nz = 2 * X.data * self.sample_interval_
+
+        for j in range(1, self.sample_steps):
+            factor_nz = np.sqrt(step_nz *
+                                self._spectrum(j * self.sample_interval_))
+
+            data_step = factor_nz * np.cos(j * log_step_nz)
+            X_step = sp.csr_matrix((data_step, indices, indptr),
+                                   shape=X.shape, dtype=X.dtype, copy=False)
+            X_new.append(X_step)
+
+            data_step = factor_nz * np.sin(j * log_step_nz)
+            X_step = sp.csr_matrix((data_step, indices, indptr),
+                                   shape=X.shape, dtype=X.dtype, copy=False)
+            X_new.append(X_step)
+
+        return sp.hstack(X_new)
+
+    def _more_tags(self):
+        return {'stateless': True}
+
+
+class AdditiveChi2Sampler(BaseAdditiveHomogenousKernelSampler):
     """Approximate feature map for additive chi2 kernel.
 
     Uses sampling the fourier transform of the kernel characteristic
@@ -316,127 +463,109 @@ class AdditiveChi2Sampler(BaseEstimator, TransformerMixin):
     2011
     """
 
-    def __init__(self, sample_steps=2, sample_interval=None):
-        self.sample_steps = sample_steps
-        self.sample_interval = sample_interval
+    # See reference, figure 2 c)
+    preset_sample_intervals = {1: 0.8, 2: 0.5, 3: 0.4}
 
-    def fit(self, X, y=None):
-        """Set the parameters
+    def _spectrum(self, omega):
+        # Spectrum function for chi2 kernel
+        return 1. / np.cosh(np.pi * omega)
 
-        Parameters
-        ----------
-        X : array-like, shape (n_samples, n_features)
-            Training data, where n_samples in the number of samples
-            and n_features is the number of features.
 
-        Returns
-        -------
-        self : object
-            Returns the transformer.
-        """
-        check_array(X, accept_sparse='csr')
-        if self.sample_interval is None:
-            # See reference, figure 2 c)
-            if self.sample_steps == 1:
-                self.sample_interval_ = 0.8
-            elif self.sample_steps == 2:
-                self.sample_interval_ = 0.5
-            elif self.sample_steps == 3:
-                self.sample_interval_ = 0.4
-            else:
-                raise ValueError("If sample_steps is not in [1, 2, 3],"
-                                 " you need to provide sample_interval")
-        else:
-            self.sample_interval_ = self.sample_interval
-        return self
+class IntersectionSampler(BaseAdditiveHomogenousKernelSampler):
+    """Approximate feature map for intersection kernel.
 
-    def transform(self, X):
-        """Apply approximate feature map to X.
+    Uses sampling the fourier transform of the kernel characteristic
+    at regular intervals.
 
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape = (n_samples, n_features)
+    Since the kernel that is to be approximated is additive, the components of
+    the input vectors can be treated separately. Each entry in the original
+    space is transformed into ``2*sample_steps+1`` features, where
+    ``sample_steps`` is a parameter of the method. Typical values of
+    ``sample_steps`` include 1, 2 and 3.
 
-        Returns
-        -------
-        X_new : {array, sparse matrix}, \
-               shape = (n_samples, n_features * (2*sample_steps + 1))
-            Whether the return value is an array of sparse matrix depends on
-            the type of the input X.
-        """
-        msg = ("%(name)s is not fitted. Call fit to set the parameters before"
-               " calling transform")
-        check_is_fitted(self, "sample_interval_", msg=msg)
+    Optimal choices for the sampling interval for certain data ranges can be
+    computed (see the reference). The default values should be reasonable.
 
-        X = check_array(X, accept_sparse='csr')
-        sparse = sp.issparse(X)
+    Read more in the :ref:`User Guide <intersection_kernel_approx>`.
 
-        # check if X has negative values. Doesn't play well with np.log.
-        if ((X.data if sparse else X) < 0).any():
-            raise ValueError("Entries of X must be non-negative.")
-        # zeroth component
-        # 1/cosh = sech
-        # cosh(0) = 1.0
+    Parameters
+    ----------
+    sample_steps : int, optional
+        Gives the number of (complex) sampling points.
 
-        transf = self._transform_sparse if sparse else self._transform_dense
-        return transf(X)
+    sample_interval : float, optional
+        Sampling interval. Must be specified when sample_steps not in {1,2,3}.
 
-    def _transform_dense(self, X):
-        non_zero = (X != 0.0)
-        X_nz = X[non_zero]
+    See also
+    --------
+    AdditiveChi2Sampler : A Fourier-approximation to the additive chi squared
+        kernel.
 
-        X_step = np.zeros_like(X)
-        X_step[non_zero] = np.sqrt(X_nz * self.sample_interval_)
+    JensenShannonSampler : A Fourier-approximation to the Jensen-Shannon
+        kernel.
 
-        X_new = [X_step]
+    References
+    ----------
+    See `"Efficient additive kernels via explicit feature maps"
+    <http://www.robots.ox.ac.uk/~vedaldi/assets/pubs/vedaldi11efficient.pdf>`_
+    A. Vedaldi and A. Zisserman, Pattern Analysis and Machine Intelligence,
+    2011
+    """
 
-        log_step_nz = self.sample_interval_ * np.log(X_nz)
-        step_nz = 2 * X_nz * self.sample_interval_
+    # Empirically selected values
+    preset_sample_intervals = {1: 1.2, 2: 0.8, 3: 0.7}
 
-        for j in range(1, self.sample_steps):
-            factor_nz = np.sqrt(step_nz /
-                                np.cosh(np.pi * j * self.sample_interval_))
+    def _spectrum(self, omega):
+        # Spectrum function for intersection kernel
+        return 2. / np.pi / (1 + 4 * omega ** 2)
 
-            X_step = np.zeros_like(X)
-            X_step[non_zero] = factor_nz * np.cos(j * log_step_nz)
-            X_new.append(X_step)
 
-            X_step = np.zeros_like(X)
-            X_step[non_zero] = factor_nz * np.sin(j * log_step_nz)
-            X_new.append(X_step)
+class JensenShannonSampler(BaseAdditiveHomogenousKernelSampler):
+    """Approximate feature map for Jensen-Shannon kernel.
 
-        return np.hstack(X_new)
+    Uses sampling the fourier transform of the kernel characteristic
+    at regular intervals.
 
-    def _transform_sparse(self, X):
-        indices = X.indices.copy()
-        indptr = X.indptr.copy()
+    Since the kernel that is to be approximated is additive, the components of
+    the input vectors can be treated separately. Each entry in the original
+    space is transformed into ``2*sample_steps+1`` features, where
+    ``sample_steps`` is a parameter of the method. Typical values of
+    ``sample_steps`` include 1, 2 and 3.
 
-        data_step = np.sqrt(X.data * self.sample_interval_)
-        X_step = sp.csr_matrix((data_step, indices, indptr),
-                               shape=X.shape, dtype=X.dtype, copy=False)
-        X_new = [X_step]
+    Optimal choices for the sampling interval for certain data ranges can be
+    computed (see the reference). The default values should be reasonable.
 
-        log_step_nz = self.sample_interval_ * np.log(X.data)
-        step_nz = 2 * X.data * self.sample_interval_
+    Read more in the :ref:`User Guide <jensen_shannon_kernel_approx>`.
 
-        for j in range(1, self.sample_steps):
-            factor_nz = np.sqrt(step_nz /
-                                np.cosh(np.pi * j * self.sample_interval_))
+    Parameters
+    ----------
+    sample_steps : int, optional
+        Gives the number of (complex) sampling points.
 
-            data_step = factor_nz * np.cos(j * log_step_nz)
-            X_step = sp.csr_matrix((data_step, indices, indptr),
-                                   shape=X.shape, dtype=X.dtype, copy=False)
-            X_new.append(X_step)
+    sample_interval : float, optional
+        Sampling interval. Must be specified when sample_steps not in {1,2,3}.
 
-            data_step = factor_nz * np.sin(j * log_step_nz)
-            X_step = sp.csr_matrix((data_step, indices, indptr),
-                                   shape=X.shape, dtype=X.dtype, copy=False)
-            X_new.append(X_step)
+    See also
+    --------
+    AdditiveChi2Sampler : A Fourier-approximation to the additive chi squared
+        kernel.
 
-        return sp.hstack(X_new)
+    IntersectionSampler : A Fourier-approximation to the intersection kernel.
 
-    def _more_tags(self):
-        return {'stateless': True}
+    References
+    ----------
+    See `"Efficient additive kernels via explicit feature maps"
+    <http://www.robots.ox.ac.uk/~vedaldi/assets/pubs/vedaldi11efficient.pdf>`_
+    A. Vedaldi and A. Zisserman, Pattern Analysis and Machine Intelligence,
+    2011
+    """
+
+    # Empirically selected values
+    preset_sample_intervals = {1: 0.6, 2: 0.4, 3: 0.2}
+
+    def _spectrum(self, omega):
+        # Spectrum function for Jensen-Shannon kernel
+        return 2. / np.log(4) / np.cosh(np.pi * omega) / (1 + 4 * omega ** 2)
 
 
 class Nystroem(BaseEstimator, TransformerMixin):

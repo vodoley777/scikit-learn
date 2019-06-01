@@ -596,6 +596,19 @@ Support for Python 3.3 has been officially dropped.
   by `Andreas Müller`_ and :user:`Guillaume Lemaitre <glemaitre>`.
 
 
+:mod:`sklearn.kernel_approximation`
+.........................
+
+- |MinorFeature| Moved majority of the code from 
+  :class:`kernel_approximation.AdditiveChi2Sampler`
+  class to the new :class:`kernel_approximation.BaseAdditiveHomogenousKernelSampler`
+  class made for general additive homogenous kernel samplers. Added derived
+  classes :class:`kernel_approximation.AdditiveChi2Sampler`,
+  :class:`kernel_approximation.IntersectionSampler` and
+  :class:`kernel_approximation.JensenShannonSampler` for additive chi2,
+  intersection and Jensen-Shannon kernel samplers.
+  :issue:`8025` by `Valery Anisimovsky`.
+
 
 :mod:`sklearn.covariance`
 .........................
