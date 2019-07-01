@@ -518,7 +518,7 @@ class _SigmoidCalibration(BaseEstimator, RegressorMixin):
 
 
 def calibration_curve(y_true, y_prob, normalize=False, n_bins=5,
-                      strategy='uniform'):
+                      strategy='uniform', sample_weight=None):
     """Compute true and predicted probabilities for a calibration curve.
 
     The method assumes the inputs come from a binary classifier.
@@ -553,6 +553,9 @@ def calibration_curve(y_true, y_prob, normalize=False, n_bins=5,
         quantile
             All bins have the same number of points.
 
+    sample_weight : array-like, shape=(n_samples,), optional, default: None
+        Weights. If set to None, no sample weights will be applied.
+
     Returns
     -------
     prob_true : array, shape (n_bins,) or smaller
@@ -568,6 +571,7 @@ def calibration_curve(y_true, y_prob, normalize=False, n_bins=5,
     International Conference on Machine Learning (ICML).
     See section 4 (Qualitative Analysis of Predictions).
     """
+
     y_true = column_or_1d(y_true)
     y_prob = column_or_1d(y_prob)
     check_consistent_length(y_true, y_prob)
@@ -596,9 +600,26 @@ def calibration_curve(y_true, y_prob, normalize=False, n_bins=5,
 
     binids = np.digitize(y_prob, bins) - 1
 
-    bin_sums = np.bincount(binids, weights=y_prob, minlength=len(bins))
-    bin_true = np.bincount(binids, weights=y_true, minlength=len(bins))
-    bin_total = np.bincount(binids, minlength=len(bins))
+    if sample_weight is None:
+        weights_sums = y_prob
+        weights_true = y_true
+        weights_total = None
+    else:
+        sample_weight = check_array(sample_weight, ensure_2d=False)
+        check_consistent_length(y_true, sample_weight)
+
+        # Check that the sample weights sum is positive
+        if sample_weight.sum() <= 0:
+            raise ValueError("Attempting to calibrate predicted probabilities "
+                             "with a non-positive weighted number of samples.")
+
+        weights_sums = sample_weight*y_prob
+        weights_true = sample_weight*y_true
+        weights_total = sample_weight
+
+    bin_sums = np.bincount(binids, weights=weights_sums, minlength=len(bins))
+    bin_true = np.bincount(binids, weights=weights_true, minlength=len(bins))
+    bin_total = np.bincount(binids, weights=weights_total, minlength=len(bins))
 
     nonzero = bin_total != 0
     prob_true = (bin_true[nonzero] / bin_total[nonzero])
