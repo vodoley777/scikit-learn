@@ -5,11 +5,14 @@ and pairwise metrics and distance computations.
 
 
 from .ranking import auc
+from .ranking import aucpr_min
 from .ranking import average_precision_score
 from .ranking import coverage_error
 from .ranking import dcg_score
 from .ranking import label_ranking_average_precision_score
 from .ranking import label_ranking_loss
+from .ranking import min_average_precision
+from .ranking import min_precision
 from .ranking import ndcg_score
 from .ranking import precision_recall_curve
 from .ranking import roc_auc_score
@@ -86,6 +89,7 @@ __all__ = [
     'adjusted_mutual_info_score',
     'adjusted_rand_score',
     'auc',
+    'aucpr_min',
     'average_precision_score',
     'balanced_accuracy_score',
     'calinski_harabaz_score',
@@ -126,6 +130,8 @@ __all__ = [
     'mean_gamma_deviance',
     'mean_tweedie_deviance',
     'median_absolute_error',
+    'min_precision',
+    'min_average_precision',
     'multilabel_confusion_matrix',
     'mutual_info_score',
     'ndcg_score',
