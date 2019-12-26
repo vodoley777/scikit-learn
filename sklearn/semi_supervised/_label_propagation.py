@@ -23,10 +23,10 @@ Label clamping:
 
 Kernel:
   A function which projects a vector into some higher dimensional space. This
-  implementation supports RBF and KNN kernels. Using the RBF kernel generates
-  a dense matrix of size O(N^2). KNN kernel will generate a sparse matrix of
-  size O(k*N) which will run much faster. See the documentation for SVMs for
-  more info on kernels.
+  implementation supports RBF, Sparse-RBF, and KNN kernels. Using the RBF
+  kernel generates a dense matrix of size O(N^2). Sparse-RBF and KNN kernel
+  will generate a sparse matrix of size O(k*N) which will run much faster. See
+  the documentation for SVMs for more info on kernels.
 
 Examples
 --------
@@ -76,17 +76,19 @@ class BaseLabelPropagation(ClassifierMixin, BaseEstimator, metaclass=ABCMeta):
 
     Parameters
     ----------
-    kernel : {'knn', 'rbf', callable}
+    kernel : {'knn', 'rbf', 'sparse-rbf', callable}
         String identifier for kernel function to use or the kernel function
-        itself. Only 'rbf' and 'knn' strings are valid inputs. The function
-        passed should take two inputs, each of shape [n_samples, n_features],
-        and return a [n_samples, n_samples] shaped weight matrix
+        itself. Only 'rbf', 'sparse-rbf', and 'knn' strings are valid inputs;
+        'sparse-rbf' calculates RBF weights for only the closest 'n_neighbors'
+        points.  The callable function passed should take two inputs, each of
+        shape [n_samples, n_features], and return a [n_samples, n_samples]
+        shaped weight matrix.
 
     gamma : float
-        Parameter for rbf kernel
+        Parameter for rbf or sparse-rbf kernel
 
     n_neighbors : integer > 0
-        Parameter for knn kernel
+        Parameter for knn or sparse-rbf kernel
 
     alpha : float
         Clamping factor
@@ -127,6 +129,17 @@ class BaseLabelPropagation(ClassifierMixin, BaseEstimator, metaclass=ABCMeta):
                 return rbf_kernel(X, X, gamma=self.gamma)
             else:
                 return rbf_kernel(X, y, gamma=self.gamma)
+        elif self.kernel == "sparse-rbf":
+            self.nn_fit = NearestNeighbors(self.n_neighbors,
+                                           n_jobs=self.n_jobs).fit(X)
+            # rbf(x1, x2) = exp(-gamma * ||x1 - x2||^2)
+            W = self.nn_fit.kneighbors_graph(y, mode='distance').T.power(2)
+            W *= -1 * self.gamma
+            np.exp(W.data, out=W.data)
+            # explicitly set diagonal,
+            # since np.exp(W.data) does not modify zeros on the diagonal
+            W.setdiag(1)
+            return W
         elif self.kernel == "knn":
             if self.nn_fit is None:
                 self.nn_fit = NearestNeighbors(self.n_neighbors,
@@ -195,7 +208,8 @@ class BaseLabelPropagation(ClassifierMixin, BaseEstimator, metaclass=ABCMeta):
                 for weight_matrix in weight_matrices])
         else:
             weight_matrices = weight_matrices.T
-            probabilities = np.dot(weight_matrices, self.label_distributions_)
+            probabilities = safe_sparse_dot(
+                    weight_matrices, self.label_distributions_)
         normalizer = np.atleast_2d(np.sum(probabilities, axis=1)).T
         probabilities /= normalizer
         return probabilities
@@ -305,17 +319,19 @@ class LabelPropagation(BaseLabelPropagation):
 
     Parameters
     ----------
-    kernel : {'knn', 'rbf', callable}
+    kernel : {'knn', 'rbf', 'sparse-rbf', callable}
         String identifier for kernel function to use or the kernel function
-        itself. Only 'rbf' and 'knn' strings are valid inputs. The function
-        passed should take two inputs, each of shape [n_samples, n_features],
-        and return a [n_samples, n_samples] shaped weight matrix.
+        itself. Only 'rbf', 'sparse-rbf', and 'knn' strings are valid inputs;
+        'sparse-rbf' calculates RBF weights for only the closest 'n_neighbors'
+        points.  The callable function passed should take two inputs, each of
+        shape [n_samples, n_features], and return a [n_samples, n_samples]
+        shaped weight matrix.
 
     gamma : float
-        Parameter for rbf kernel
+        Parameter for rbf or sparse-rbf kernel
 
     n_neighbors : integer > 0
-        Parameter for knn kernel
+        Parameter for knn or sparse-rbf kernel
 
     max_iter : integer
         Change maximum number of iterations allowed
@@ -411,17 +427,20 @@ class LabelSpreading(BaseLabelPropagation):
 
     Parameters
     ----------
-    kernel : {'knn', 'rbf', callable}
+    kernel : {'knn', 'rbf', 'sparse-rbf', callable}
         String identifier for kernel function to use or the kernel function
-        itself. Only 'rbf' and 'knn' strings are valid inputs. The function
-        passed should take two inputs, each of shape [n_samples, n_features],
-        and return a [n_samples, n_samples] shaped weight matrix
+        itself. Only 'rbf', 'sparse-rbf', and 'knn' strings are valid inputs;
+        'sparse-rbf' calculates RBF weights for only the closest 'n_neighbors'
+        points.  The callable function passed should take two inputs, each of
+        shape [n_samples, n_features], and return a [n_samples, n_samples]
+        shaped weight matrix.
 
     gamma : float
-      parameter for rbf kernel
+      Parameter for rbf or sparse-rbf kernel
 
     n_neighbors : integer > 0
-      parameter for knn kernel
+      Parameter for knn or sparse-rbf kernel
+
 
     alpha : float
       Clamping factor. A value in (0, 1) that specifies the relative amount
