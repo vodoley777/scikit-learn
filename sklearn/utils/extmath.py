@@ -497,7 +497,7 @@ def cartesian(arrays, out=None):
     return out
 
 
-def svd_flip(u, v, u_based_decision=True):
+def svd_flip(u, v, u_based_decision=True, npx=np):
     """Sign correction to ensure deterministic output from SVD.
 
     Adjusts the columns of u and the rows of v such that the loadings in the
@@ -523,6 +523,11 @@ def svd_flip(u, v, u_based_decision=True):
         decision on is generally algorithm dependent.
 
 
+    npx : module
+        Module compatible with the numpy API to make it possible to use this
+        utility function with alternative array libraries by following NEP 37
+        idioms.
+
     Returns
     -------
     u_adjusted, v_adjusted : arrays with the same dimensions as the input.
@@ -530,14 +535,14 @@ def svd_flip(u, v, u_based_decision=True):
     """
     if u_based_decision:
         # columns of u, rows of v
-        max_abs_cols = np.argmax(np.abs(u), axis=0)
-        signs = np.sign(u[max_abs_cols, range(u.shape[1])])
+        max_abs_cols = npx.argmax(npx.abs(u), axis=0)
+        signs = npx.sign(u[max_abs_cols, list(range(u.shape[1]))])
         u *= signs
         v *= signs[:, np.newaxis]
     else:
         # rows of v, columns of u
-        max_abs_rows = np.argmax(np.abs(v), axis=1)
-        signs = np.sign(v[range(v.shape[0]), max_abs_rows])
+        max_abs_rows = npx.argmax(np.abs(v), axis=1)
+        signs = npx.sign(v[list(range(v.shape[0])), max_abs_rows])
         u *= signs
         v *= signs[:, np.newaxis]
     return u, v
