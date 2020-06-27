@@ -14,7 +14,6 @@ from math import log, sqrt
 import numbers
 
 import numpy as np
-from scipy import linalg
 from scipy.special import gammaln
 from scipy.sparse import issparse
 from scipy.sparse.linalg import svds
@@ -26,6 +25,7 @@ from ..utils.extmath import fast_logdet, randomized_svd, svd_flip
 from ..utils.extmath import stable_cumsum
 from ..utils.validation import check_is_fitted
 from ..utils.validation import _deprecate_positional_args
+from ..utils import _get_array_module
 
 
 def _assess_dimension(spectrum, rank, n_samples):
@@ -396,6 +396,7 @@ class PCA(_BasePCA):
 
         X = self._validate_data(X, dtype=[np.float64, np.float32],
                                 ensure_2d=True, copy=self.copy)
+        npx = _get_array_module(X)
 
         # Handle n_components==None
         if self.n_components is None:
@@ -420,14 +421,15 @@ class PCA(_BasePCA):
 
         # Call different fits for either full or truncated SVD
         if self._fit_svd_solver == 'full':
-            return self._fit_full(X, n_components)
+            return self._fit_full(X, n_components, npx=npx)
         elif self._fit_svd_solver in ['arpack', 'randomized']:
-            return self._fit_truncated(X, n_components, self._fit_svd_solver)
+            return self._fit_truncated(X, n_components, self._fit_svd_solver,
+                                       npx=npx)
         else:
             raise ValueError("Unrecognized svd_solver='{0}'"
                              "".format(self._fit_svd_solver))
 
-    def _fit_full(self, X, n_components):
+    def _fit_full(self, X, n_components, npx=np):
         """Fit the model by computing full SVD on X"""
         n_samples, n_features = X.shape
 
@@ -448,12 +450,12 @@ class PCA(_BasePCA):
                                  % (n_components, type(n_components)))
 
         # Center data
-        self.mean_ = np.mean(X, axis=0)
+        self.mean_ = npx.mean(X, axis=0)
         X -= self.mean_
 
-        U, S, Vt = linalg.svd(X, full_matrices=False)
+        U, S, Vt = npx.linalg.svd(X, full_matrices=False)
         # flip eigenvectors' sign to enforce deterministic output
-        U, Vt = svd_flip(U, Vt)
+        U, Vt = svd_flip(U, Vt, npx=npx)
 
         components_ = Vt
 
@@ -493,7 +495,7 @@ class PCA(_BasePCA):
 
         return U, S, Vt
 
-    def _fit_truncated(self, X, n_components, svd_solver):
+    def _fit_truncated(self, X, n_components, svd_solver, npx=np):
         """Fit the model by computing truncated SVD (by ARPACK or randomized)
         on X
         """
@@ -521,10 +523,10 @@ class PCA(_BasePCA):
                              % (n_components, min(n_samples, n_features),
                                 svd_solver))
 
-        random_state = check_random_state(self.random_state)
+        random_state = check_random_state(self.random_state, npx=npx)
 
         # Center data
-        self.mean_ = np.mean(X, axis=0)
+        self.mean_ = npx.mean(X, axis=0)
         X -= self.mean_
 
         if svd_solver == 'arpack':
@@ -550,7 +552,7 @@ class PCA(_BasePCA):
 
         # Get variance explained by singular values
         self.explained_variance_ = (S ** 2) / (n_samples - 1)
-        total_var = np.var(X, ddof=1, axis=0)
+        total_var = npx.var(X, ddof=1, axis=0)
         self.explained_variance_ratio_ = \
             self.explained_variance_ / total_var.sum()
         self.singular_values_ = S.copy()  # Store the singular values.
@@ -584,9 +586,11 @@ class PCA(_BasePCA):
         check_is_fitted(self)
 
         X = check_array(X)
+        npx = _get_array_module(X)
+
         Xr = X - self.mean_
         n_features = X.shape[1]
-        precision = self.get_precision()
+        precision = self.get_precision(npx=npx)
         log_like = -.5 * (Xr * (np.dot(Xr, precision))).sum(axis=1)
         log_like -= .5 * (n_features * log(2. * np.pi) -
                           fast_logdet(precision))

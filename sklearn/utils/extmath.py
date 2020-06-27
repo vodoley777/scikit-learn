@@ -14,13 +14,14 @@ Extended math utilities.
 import warnings
 
 import numpy as np
-from scipy import linalg, sparse
+from scipy import sparse
 
 from . import check_random_state
 from ._logistic_sigmoid import _log_logistic_sigmoid
 from .sparsefuncs_fast import csr_row_norms
 from .validation import check_array
 from .validation import _deprecate_positional_args
+from ..utils import _get_array_module
 
 
 def squared_norm(x):
@@ -160,7 +161,7 @@ def safe_sparse_dot(a, b, *, dense_output=False):
 @_deprecate_positional_args
 def randomized_range_finder(A, *, size, n_iter,
                             power_iteration_normalizer='auto',
-                            random_state=None):
+                            random_state=None, npx=np):
     """Computes an orthonormal matrix whose range approximates the range of A.
 
     Parameters
@@ -208,7 +209,7 @@ def randomized_range_finder(A, *, size, n_iter,
     analysis
     A. Szlam et al. 2014
     """
-    random_state = check_random_state(random_state)
+    random_state = check_random_state(random_state, npx)
 
     # Generating normal random vectors with shape: (A.shape[1], size)
     Q = random_state.normal(size=(A.shape[1], size))
@@ -222,6 +223,8 @@ def randomized_range_finder(A, *, size, n_iter,
             power_iteration_normalizer = 'none'
         else:
             power_iteration_normalizer = 'LU'
+            if not hasattr(npx.linalg, 'lu'):
+                power_iteration_normalizer = 'QR'
 
     # Perform power iterations with Q to further 'imprint' the top
     # singular vectors of A in Q
@@ -230,15 +233,15 @@ def randomized_range_finder(A, *, size, n_iter,
             Q = safe_sparse_dot(A, Q)
             Q = safe_sparse_dot(A.T, Q)
         elif power_iteration_normalizer == 'LU':
-            Q, _ = linalg.lu(safe_sparse_dot(A, Q), permute_l=True)
-            Q, _ = linalg.lu(safe_sparse_dot(A.T, Q), permute_l=True)
+            Q, _ = npx.linalg.lu(safe_sparse_dot(A, Q), permute_l=True)
+            Q, _ = npx.linalg.lu(safe_sparse_dot(A.T, Q), permute_l=True)
         elif power_iteration_normalizer == 'QR':
-            Q, _ = linalg.qr(safe_sparse_dot(A, Q), mode='economic')
-            Q, _ = linalg.qr(safe_sparse_dot(A.T, Q), mode='economic')
+            Q, _ = npx.linalg.qr(safe_sparse_dot(A, Q))
+            Q, _ = npx.linalg.qr(safe_sparse_dot(A.T, Q))
 
     # Sample the range of A using by linear projection of Q
     # Extract an orthonormal basis
-    Q, _ = linalg.qr(safe_sparse_dot(A, Q), mode='economic')
+    Q, _ = npx.linalg.qr(safe_sparse_dot(A, Q), mode='reduced')
     return Q
 
 
@@ -330,7 +333,9 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter='auto',
                           type(M).__name__),
                       sparse.SparseEfficiencyWarning)
 
-    random_state = check_random_state(random_state)
+    npx = _get_array_module(M)
+
+    random_state = check_random_state(random_state, npx=npx)
     n_random = n_components + n_oversamples
     n_samples, n_features = M.shape
 
@@ -348,16 +353,16 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter='auto',
     Q = randomized_range_finder(
         M, size=n_random, n_iter=n_iter,
         power_iteration_normalizer=power_iteration_normalizer,
-        random_state=random_state)
+        random_state=random_state, npx=npx)
 
     # project M to the (k + p) dimensional space using the basis vectors
     B = safe_sparse_dot(Q.T, M)
 
     # compute the SVD on the thin matrix: (k + p) wide
-    Uhat, s, Vt = linalg.svd(B, full_matrices=False)
+    Uhat, s, Vt = npx.linalg.svd(B, full_matrices=False)
 
     del B
-    U = np.dot(Q, Uhat)
+    U = npx.dot(Q, Uhat)
 
     if flip_sign:
         if not transpose:
@@ -497,7 +502,7 @@ def cartesian(arrays, out=None):
     return out
 
 
-def svd_flip(u, v, u_based_decision=True):
+def svd_flip(u, v, u_based_decision=True, npx=np):
     """Sign correction to ensure deterministic output from SVD.
 
     Adjusts the columns of u and the rows of v such that the loadings in the
@@ -523,6 +528,11 @@ def svd_flip(u, v, u_based_decision=True):
         decision on is generally algorithm dependent.
 
 
+    npx : module
+        Module compatible with the numpy API to make it possible to use this
+        utility function with alternative array libraries by following NEP 37
+        idioms.
+
     Returns
     -------
     u_adjusted, v_adjusted : arrays with the same dimensions as the input.
@@ -530,14 +540,14 @@ def svd_flip(u, v, u_based_decision=True):
     """
     if u_based_decision:
         # columns of u, rows of v
-        max_abs_cols = np.argmax(np.abs(u), axis=0)
-        signs = np.sign(u[max_abs_cols, range(u.shape[1])])
+        max_abs_cols = npx.argmax(npx.abs(u), axis=0)
+        signs = npx.sign(u[max_abs_cols, list(range(u.shape[1]))])
         u *= signs
         v *= signs[:, np.newaxis]
     else:
         # rows of v, columns of u
-        max_abs_rows = np.argmax(np.abs(v), axis=1)
-        signs = np.sign(v[range(v.shape[0]), max_abs_rows])
+        max_abs_rows = npx.argmax(np.abs(v), axis=1)
+        signs = npx.sign(v[list(range(v.shape[0])), max_abs_rows])
         u *= signs
         v *= signs[:, np.newaxis]
     return u, v

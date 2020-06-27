@@ -8,6 +8,7 @@ _global_config = {
     'working_memory': int(os.environ.get('SKLEARN_WORKING_MEMORY', 1024)),
     'print_changed_only': True,
     'display': 'text',
+    'enable_duck_array': False,
 }
 
 
@@ -28,7 +29,8 @@ def get_config():
 
 
 def set_config(assume_finite=None, working_memory=None,
-               print_changed_only=None, display=None):
+               print_changed_only=None, display=None,
+               enable_duck_array=None):
     """Set global scikit-learn configuration
 
     .. versionadded:: 0.19
@@ -80,6 +82,8 @@ def set_config(assume_finite=None, working_memory=None,
         _global_config['print_changed_only'] = print_changed_only
     if display is not None:
         _global_config['display'] = display
+    if enable_duck_array is not None:
+        _global_config['enable_duck_array'] = enable_duck_array
 
 
 @contextmanager

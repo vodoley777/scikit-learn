@@ -3,6 +3,7 @@ import scipy as sp
 
 import pytest
 
+import sklearn
 from sklearn.utils._testing import assert_allclose
 
 from sklearn import datasets
@@ -638,3 +639,67 @@ def test_assess_dimesion_rank_one():
     assert np.isfinite(_assess_dimension(s, rank=1, n_samples=n_samples))
     for rank in range(2, n_features):
         assert _assess_dimension(s, rank, n_samples) == -np.inf
+
+
+# XXX: it should be possible to support 'randomized' by adding npx=np
+# in appropriate locations. The 'arpack' svd_solver, on the other-hand,
+# cannot easily be adapted to work on non-numpy allocated arrays.
+# @pytest.mark.parametrize('svd_solver', ["full", "randomized", "auto"])
+@pytest.mark.parametrize('svd_solver', ["full"])
+@pytest.mark.parametrize('copy', [True, False])
+def test_pca_jax_data(svd_solver, copy):
+    jnp = pytest.importorskip("jax.numpy")
+    X_np = np.random.RandomState(42).randn(1000, 100)
+    X_np = X_np.astype(np.float32)
+    X_jnp = jnp.asarray(X_np)
+
+    pca_np = PCA(n_components=3, svd_solver=svd_solver, copy=copy,
+                 random_state=0)
+    X_pca_np = pca_np.fit_transform(X_np)
+
+    with sklearn.config_context(enable_duck_array=True):
+        pca_jnp = PCA(**pca_np.get_params())
+        X_pca_jnp = pca_jnp.fit_transform(X_jnp)
+
+    assert isinstance(X_pca_jnp, type(X_jnp))
+    assert isinstance(pca_jnp.components_, type(X_jnp))
+
+    assert_allclose(X_pca_np, X_pca_jnp, atol=1e-3)
+    assert_allclose(pca_np.components_, pca_jnp.components_, atol=1e-3)
+
+
+@pytest.mark.parametrize('svd_solver', ["full", "randomized"])
+@pytest.mark.parametrize('iterated_power', [2, 10])
+@pytest.mark.parametrize('copy', [True, False])
+def test_pca_cupy_data(svd_solver, iterated_power, copy):
+    cp = pytest.importorskip("cupy")
+    X_np = np.random.RandomState(42).randn(1000, 100)
+    X_np = X_np.astype(np.float32)
+    X_cp = cp.asarray(X_np)
+
+    pca_np = PCA(n_components=3, svd_solver=svd_solver, copy=copy,
+                 random_state=0, iterated_power=iterated_power)
+    pca_np.fit(X_np)
+
+    with sklearn.config_context(enable_duck_array=True):
+        pca_cp = PCA(**pca_np.get_params())
+        X_pca_cp = pca_cp.fit_transform(X_cp)
+
+    assert isinstance(X_pca_cp, type(X_cp))
+    assert isinstance(pca_cp.components_, type(X_cp))
+
+    """
+    Since Numpy and Cupy RandomState produce different values
+    from similar integer seed, the resulting embeddings
+    cannot be directly compared. Because of that, this test only check for
+    the approximative similarity of the singular values and scores.
+    """
+
+    sv_np = pca_np.singular_values_
+    sv_cp = cp.asnumpy(pca_cp.singular_values_)
+    assert_allclose(sv_np, sv_cp, rtol=5e-2)
+
+    with sklearn.config_context(enable_duck_array=True):
+        score = pca_cp.score(X_cp)
+        score = cp.asnumpy(score)
+        assert_allclose(pca_np.score(X_np), score, rtol=8e-3)
