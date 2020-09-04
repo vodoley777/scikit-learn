@@ -38,6 +38,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RepeatedKFold
 from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import BinnedStratifiedKFold
 
 from sklearn.linear_model import Ridge
 
@@ -45,7 +46,7 @@ from sklearn.model_selection._split import _validate_shuffle_split
 from sklearn.model_selection._split import _build_repr
 
 from sklearn.datasets import load_digits
-from sklearn.datasets import make_classification
+from sklearn.datasets import make_classification, make_regression
 
 from sklearn.svm import SVC
 
@@ -82,6 +83,7 @@ def test_cross_validator_with_default_params():
     lopo = LeavePGroupsOut(p)
     ss = ShuffleSplit(random_state=0)
     ps = PredefinedSplit([1, 1, 2, 2])  # n_splits = np of unique folds = 2
+    bskf = BinnedStratifiedKFold(n_splits)
 
     loo_repr = "LeaveOneOut()"
     lpo_repr = "LeavePOut(p=2)"
@@ -92,15 +94,17 @@ def test_cross_validator_with_default_params():
     ss_repr = ("ShuffleSplit(n_splits=10, random_state=0, "
                "test_size=None, train_size=None)")
     ps_repr = "PredefinedSplit(test_fold=array([1, 1, 2, 2]))"
+    bskf_repr = ("BinnedStratifiedKFold(n_bins=5, n_splits=2, "
+                 "random_state=None, shuffle=False)")
 
     n_splits_expected = [n_samples, comb(n_samples, p), n_splits, n_splits,
                          n_unique_groups, comb(n_unique_groups, p),
-                         n_shuffle_splits, 2]
+                         n_shuffle_splits, 2, 2]
 
     for i, (cv, cv_repr) in enumerate(zip(
-            [loo, lpo, kf, skf, lolo, lopo, ss, ps],
+            [loo, lpo, kf, skf, lolo, lopo, ss, ps, bskf],
             [loo_repr, lpo_repr, kf_repr, skf_repr, lolo_repr, lopo_repr,
-             ss_repr, ps_repr])):
+             ss_repr, ps_repr, bskf_repr])):
         # Test if get_n_splits works correctly
         assert n_splits_expected[i] == cv.get_n_splits(X, y, groups)
 
@@ -138,7 +142,8 @@ def test_2d_y():
                  ShuffleSplit(), StratifiedShuffleSplit(test_size=.5),
                  GroupShuffleSplit(), LeaveOneGroupOut(),
                  LeavePGroupsOut(n_groups=2), GroupKFold(n_splits=3),
-                 TimeSeriesSplit(), PredefinedSplit(test_fold=groups)]
+                 TimeSeriesSplit(), PredefinedSplit(test_fold=groups),
+                 BinnedStratifiedKFold()]
     for splitter in splitters:
         list(splitter.split(X, y, groups))
         list(splitter.split(X, y_2d, groups))
@@ -619,10 +624,10 @@ def test_stratified_shuffle_split_iter():
             assert_array_equal(np.unique(y[train]), np.unique(y[test]))
             # Checks if folds keep classes proportions
             p_train = (np.bincount(np.unique(y[train],
-                                   return_inverse=True)[1]) /
+                                             return_inverse=True)[1]) /
                        float(len(y[train])))
             p_test = (np.bincount(np.unique(y[test],
-                                  return_inverse=True)[1]) /
+                                            return_inverse=True)[1]) /
                       float(len(y[test])))
             assert_array_almost_equal(p_train, p_test, 1)
             assert len(train) + len(test) == y.size
@@ -808,8 +813,7 @@ def test_leave_one_p_group_out():
     assert repr(logo) == 'LeaveOneGroupOut()'
     assert repr(lpgo_1) == 'LeavePGroupsOut(n_groups=1)'
     assert repr(lpgo_2) == 'LeavePGroupsOut(n_groups=2)'
-    assert (repr(LeavePGroupsOut(n_groups=3)) ==
-                 'LeavePGroupsOut(n_groups=3)')
+    assert (repr(LeavePGroupsOut(n_groups=3)) == 'LeavePGroupsOut(n_groups=3)')
 
     for j, (cv, p_groups_out) in enumerate(((logo, 1), (lpgo_1, 1),
                                             (lpgo_2, 2))):
@@ -875,8 +879,7 @@ def test_leave_group_out_changing_groups():
 
     # n_splits = no of 2 (p) group combinations of the unique groups = 3C2 = 3
     assert (
-        3 == LeavePGroupsOut(n_groups=2).get_n_splits(X, y=X,
-                                                    groups=groups))
+        3 == LeavePGroupsOut(n_groups=2).get_n_splits(X, y=X, groups=groups))
     # n_splits = no of unique groups (C(uniq_lbls, 1) = n_unique_groups)
     assert 3 == LeaveOneGroupOut().get_n_splits(X, y=X,
                                                 groups=groups)
@@ -1314,8 +1317,7 @@ def test_group_kfold():
     # Check that folds have approximately the same size
     assert len(folds) == len(groups)
     for i in np.unique(folds):
-        assert (tolerance >=
-                             abs(sum(folds == i) - ideal_n_groups_per_fold))
+        assert (tolerance >= abs(sum(folds == i) - ideal_n_groups_per_fold))
 
     # Check that each group appears only in 1 fold
     for group in np.unique(groups):
@@ -1351,8 +1353,7 @@ def test_group_kfold():
     # Check that folds have approximately the same size
     assert len(folds) == len(groups)
     for i in np.unique(folds):
-        assert (tolerance >=
-                             abs(sum(folds == i) - ideal_n_groups_per_fold))
+        assert (tolerance >= abs(sum(folds == i) - ideal_n_groups_per_fold))
 
     # Check that each group appears only in 1 fold
     with warnings.catch_warnings():
@@ -1611,6 +1612,85 @@ def test_leave_p_out_empty_trainset():
             ValueError,
             match='p=2 must be strictly less than the number of samples=2'):
         next(cv.split(X, y, groups=[1, 2]))
+
+
+def test_binnedstratifiedkfold_error():
+    with pytest.raises(ValueError, match='Need at least two bins'):
+        BinnedStratifiedKFold(n_bins=1)
+
+
+def test_binnedstratifiedkfold_balance():
+    rng = np.random.RandomState(0)
+    for _ in range(10):
+        n_splits = 2 + int(10 * rng.rand())
+        X, y = make_regression(noise=10, random_state=rng)
+        train_sizes = []
+        test_sizes = []
+
+        bskf = BinnedStratifiedKFold(n_splits=n_splits)
+
+        for train_index, test_index in bskf.split(X=X, y=y):
+            train_sizes.append(len(train_index))
+            test_sizes.append(len(test_index))
+
+        assert (np.max(test_sizes) - np.min(test_sizes)) <= 1
+        assert (np.max(train_sizes) - np.min(train_sizes)) <= 1
+        assert np.sum(test_sizes) == X.shape[0]
+        assert np.sum(train_sizes) == X.shape[0] * (n_splits - 1)
+
+
+def test_binnedstratifiedkfold_stable_moments_between_splits():
+    """check if BinnedStratifiedKFold performs on average better than KFold in
+    terms of lower between-fold variance of fold mean(y_test) and fold
+    std(y_test)
+    """
+    binned_has_more_stable_std_list = []
+    binned_has_more_stable_mean_list = []
+    rng = np.random.RandomState(0)
+
+    for trial in range(100):
+        n_splits = 2 + int(10*rng.rand())
+        X, y = make_regression(noise=10, random_state=rng)
+
+        ymeans_binned = []
+        ystds_binned = []
+
+        skf = BinnedStratifiedKFold(n_splits=n_splits)
+
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+        bins = np.percentile(y, np.linspace(0, 100, skf.n_bins + 1))
+        bins[-1] += 1e-8
+
+        for train_index, test_index in skf.split(X=X, y=y):
+            y_test = y[test_index]
+            ymeans_binned.append(y_test.mean())
+            ystds_binned.append(y_test.std())
+            hist_, _ = np.histogram(y[test_index], bins=bins)
+
+            assert all(abs(hist_ - np.mean(hist_)) <= 1)
+
+        ymeans_regular = []
+        ystds_regular = []
+        for train_index_reg, test_index_reg in kf.split(X=X, y=y):
+            ymeans_regular.append(y[test_index_reg].mean())
+            ystds_regular.append(y[test_index_reg].std())
+
+        binned_has_more_stable_std = np.std(
+            ystds_regular) > np.std(ystds_binned)
+        binned_has_more_stable_std_list.append(binned_has_more_stable_std)
+
+        binned_has_more_stable_mean = np.std(
+            ymeans_regular) > np.std(ymeans_binned)
+        binned_has_more_stable_mean_list.append(binned_has_more_stable_mean)
+
+    binned_has_more_stable_std_fraction = np.mean(
+        binned_has_more_stable_std_list)
+    binned_has_more_stable_mean_fraction = np.mean(
+        binned_has_more_stable_mean_list)
+
+    assert binned_has_more_stable_std_fraction > 0.5
+    assert binned_has_more_stable_mean_fraction > 0.5
 
 
 @pytest.mark.parametrize('Klass', (KFold, StratifiedKFold))

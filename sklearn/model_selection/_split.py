@@ -632,6 +632,7 @@ class StratifiedKFold(_BaseKFold):
     See also
     --------
     RepeatedStratifiedKFold: Repeats Stratified K-Fold n times.
+    BinnedStratifiedKFold: Stratified K-Fold variant for regression targets.
     """
     @_deprecate_positional_args
     def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
@@ -1965,6 +1966,86 @@ class PredefinedSplit(BaseCrossValidator):
             Returns the number of splitting iterations in the cross-validator.
         """
         return len(self.unique_folds)
+
+
+class BinnedStratifiedKFold(StratifiedKFold):
+    """Stratified K-Folds cross-validator for regression
+
+    Provides train/test indices to split data in train/test sets.
+
+    This cross-validation object is a variation of KFold that returns
+    stratified folds by binning a regression target. The folds are made
+    by approximately preserving the distribution of targets in each bin.
+
+    Read more in the :ref:`User Guide <cross_validation>`.
+
+    Parameters
+    ----------
+    n_splits : int, default=5
+        Number of folds. Must be at least 2.
+
+    shuffle : boolean, default=False
+        Whether to shuffle each stratification of the data before splitting
+        into batches.
+
+    n_bins : int, default=10
+        How many quantile bins to use.
+
+    random_state : None, int or RandomState
+        When ``shuffle=True``, pseudo-random number generator state used for
+        shuffling.
+        See :term:`glossary <random_state>` for details.
+
+    Examples
+    --------
+    >>> from sklearn.model_selection import BinnedStratifiedKFold
+    >>> y = np.arange(11.0)
+    >>> rng = np.random.RandomState(0)
+    >>> X = y + 0.1 * rng.randn(len(y))
+    >>> cv = BinnedStratifiedKFold(n_splits=3)
+    >>> skf = cv.split(X, y)
+    >>> print(cv)
+    BinnedStratifiedKFold(n_bins=5, n_splits=3, random_state=None...)
+    >>> for train_index, test_index in skf:
+    ...    print("TRAIN:", train_index, "TEST:", test_index)
+    ...    X_train, X_test = X[train_index], X[test_index]
+    ...    y_train, y_test = y[train_index], y[test_index]
+    TRAIN: [ 1  2  4  6  7  8 10] TEST: [0 3 5 9]
+    TRAIN: [0 2 3 5 6 8 9] TEST: [ 1  4  7 10]
+    TRAIN: [ 0  1  3  4  5  7  9 10] TEST: [2 6 8]
+
+
+    Notes
+    -----
+    The implementation is designed to:
+
+    * Generate test sets such that all contain the same distribution of
+      binned targets, or as close as possible.
+    * Preserve order dependencies in the dataset ordering, when
+      ``shuffle=False``: all samples from bin k in some test set were
+      contiguous in y, or separated in y by samples from classes other than k.
+    * Generate test sets where the smallest and largest differ by at most one
+      sample.
+
+    See also
+    --------
+    KFold: k-fold generator without any stratification
+    StratifiedKFold: stratified k-fold generator for classification data
+    """
+
+    def __init__(self, n_splits=5, shuffle=False, n_bins=5,
+                 random_state=None):
+        super().__init__(n_splits, shuffle, random_state)
+        self.n_bins = n_bins
+        if n_bins < 2:
+            raise ValueError("Need at least two bins, got {}.".format(
+                n_bins))
+
+    def _make_test_folds(self, X, y):
+        percentiles = np.percentile(
+            y, np.linspace(0, 100, self.n_bins + 1))
+        bins = np.searchsorted(percentiles[1:-1], y)
+        return super()._make_test_folds(X, bins)
 
 
 class _CVIterableWrapper(BaseCrossValidator):
