@@ -38,6 +38,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RepeatedKFold
 from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import GroupTimeSeriesSplit
 
 from sklearn.linear_model import Ridge
 

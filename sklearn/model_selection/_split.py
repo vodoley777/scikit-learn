@@ -43,8 +43,8 @@ __all__ = ['BaseCrossValidator',
            'StratifiedShuffleSplit',
            'PredefinedSplit',
            'train_test_split',
-           'check_cv']
-
+           'check_cv',
+           'GroupTimeSeriesSplit']
 
 class BaseCrossValidator(metaclass=ABCMeta):
     """Base class for all cross-validators
