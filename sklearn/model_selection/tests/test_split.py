@@ -1728,6 +1728,18 @@ def test_group_time_series_non_overlap_group():
     assert_array_equal(groups[test], ['d', 'd', 'd'])
 
 
+def test_group_time_series_non_continuous():
+    groups = np.array(['a', 'a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b',
+                       'c', 'c', 'c', 'c', 'a', 'd', 'd'])
+    X = y = np.ones(len(groups))
+    with pytest.raises(
+            ValueError,
+            match="The groups should be continuous."
+                  " Found a non-countinuous group at"
+                  " index=15"):
+        next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
+
+
 @pytest.mark.parametrize('cv, expected', [
     (KFold(), True),
     (KFold(shuffle=True, random_state=123), True),
