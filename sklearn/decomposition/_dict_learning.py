@@ -18,6 +18,7 @@ from ..base import BaseEstimator, TransformerMixin
 from ..utils import deprecated
 from ..utils import (check_array, check_random_state, gen_even_slices,
                      gen_batches)
+from ..utils._mask import _get_mask
 from ..utils.extmath import randomized_svd, row_norms
 from ..utils.validation import check_is_fitted, _deprecate_positional_args
 from ..utils.fixes import delayed
@@ -894,6 +895,201 @@ def dict_learning_online(X, n_components=2, *, alpha=1, n_iter=100,
         return dictionary.T
 
 
+def sparse_encode_na(X, observed_mask, dictionary, alpha=1):
+    """ Proxy for sparse_encode with observed_mask
+
+    Put 0 on nan and on corresponding column of D
+    then call sparse_encode
+
+    Parameters
+    ----------
+    X : array of shape (n_samples, n_features)
+        Data matrix without Nan. should have been replaced by 0
+
+    observed_mask : array of shape (n_samples, n_features)
+        Boolean matrix with 0 where X contains nan
+
+    dictionary : array of shape (n_components, n_features)
+        The dictionary matrix against which to solve the sparse coding of
+        the data.
+
+    alpha : float,
+        Sparsity controlling parameter.
+
+    """
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+
+    n_samples = X.shape[0]
+    n_components = dictionary.shape[0]
+
+    code_nan = np.zeros((n_samples, n_components))
+    for i in range(n_samples):
+        Do = np.multiply(dictionary, observed_mask[i])
+        code_nan[i] = sparse_encode(X[[i]], Do, alpha=alpha, check_input=False)
+
+    return code_nan
+
+
+def update1_na(X, code, C, B, e, observed_mask, t, ro):
+    """Update C, B, e inplace"""
+    gamma = (1 - 1/t)**ro
+
+    n_samples = X.shape[0]
+    # update B
+    # Bkj <- gamma * Bkj + x_obs_k . code_j^T
+    B *= gamma
+    B += np.einsum('ri,rj->ij', X, code) / n_samples
+
+    # update C
+    # Cjk <- gamma * Cjk + mask_k * code_j²
+    C *= gamma
+    C += np.einsum('ri,rj->ij', code ** 2, observed_mask) / n_samples
+
+    # update e, part I
+    # e_jk <- gamma * e_jk
+    e *= gamma
+
+
+def update_dict_na(C, B, e, D, code, observed_mask, Td=5):
+    """Update dictionary inplace"""
+
+    e_temp = e.copy()
+    for td in range(Td):
+
+        for j in range(D.shape[1]):
+            D_code = D @ code.T
+            D_code_o = np.multiply(observed_mask.T, D_code) * code[:, j]
+
+            e_temp[j] = e[j] + np.mean(D_code_o, axis=1)
+
+            # solve for uj: cj * uj = bj - ej + cj * dj
+            # then dj <- uj
+            np.divide(
+                B[:, j] - e_temp[j] + np.multiply(C[j], D[:, j]), C[j],
+                where=(C[j] != 0), out=D[:, j]
+            )
+
+            # Project uj on the constraint set
+            D[:, j] /= linalg.norm(D[:, j])
+
+
+def dict_learning_na(X, n_components=12, alpha=1, ro=2,
+                     n_iter=200, return_code=True, return_n_iter=False):
+    """Solves a dictionary learning matrix factorization problem online.
+
+    X : array of shape (n_samples, n_features)
+        Data matrix with nan.
+
+    n_components : int,
+        Number of dictionary atoms to extract.
+
+    alpha : float,
+        Sparsity controlling parameter.
+
+    ro : float,
+        forgetting factor
+
+    n_iter : int,
+        Number of mini-batch iterations to perform.
+
+    return_code : boolean,
+        Whether to also return the code U or just the dictionary V.
+
+    return_n_iter : bool
+        Whether or not to return the number of iterations.
+
+    Returns
+    -------
+    code : array of shape (n_samples, n_components),
+        the sparse code (only returned if `return_code=True`)
+
+    dictionary : array of shape (n_components, n_features),
+        the solutions to the dictionary learning problem
+
+    n_iter : int
+        Number of iterations run. Returned only if `return_n_iter` is
+        set to `True`.
+
+    Notes
+    -----
+    **References:**
+
+    Z. Szabo, B. Poczos, A. Lörnicz, 2011: Online Group-Structured
+    Dictionary Learning
+    """
+
+    n_samples, n_features = X.shape
+
+    # mask of the observed values of X
+    observed_mask = np.logical_not(_get_mask(X, np.nan))
+
+    # X observed, 0 where unobserved
+    Xo = np.nan_to_num(X)
+
+    # init code, dict
+    code, S, dictionary = linalg.svd(Xo, full_matrices=False)
+    dictionary = S[:, np.newaxis] * dictionary
+
+    r = len(dictionary)
+    if n_components <= r:  # True even if n_components=None
+        code = code[:, :n_components]
+        dictionary = dictionary[:n_components, :]
+    else:
+        code = np.c_[code, np.zeros((len(code), n_components - r))]
+        dictionary = np.r_[dictionary,
+                           np.zeros((n_components - r, dictionary.shape[1]))]
+
+    D = dictionary.T
+
+    # init stats
+    C = np.zeros((n_components, n_features))
+    B = np.zeros((n_features, n_components))
+    e = np.zeros((n_components, n_features))
+
+    batch_size = 3
+
+    batches = gen_batches(n_samples, batch_size)
+    batches = itertools.cycle(batches)
+
+    for t_iter, batch in zip(range(n_iter), batches):
+
+        # minibatch of X observed
+        Xo_minibatch = Xo[batch]
+
+        # observed mask for the minibatch
+        observed_mask_minibatch = observed_mask[batch]
+
+        # compute code for this minibatch
+        this_code = sparse_encode_na(Xo_minibatch, observed_mask_minibatch,
+                                     D.T, alpha)
+
+        # update stats
+        update1_na(Xo_minibatch, this_code, C, B, e,
+                   observed_mask_minibatch, t_iter+1, ro)
+
+        # update dictionary
+        update_dict_na(C, B, e, D, this_code, observed_mask_minibatch)
+
+        # update e, part II
+        # e_jk <- e_jk + mask_k * code_j * (D.code)_k
+        code_D_o = np.multiply(observed_mask_minibatch, this_code.dot(D.T))
+        e += (np.einsum('ri,rj->ij', this_code, code_D_o)
+              / Xo_minibatch.shape[0])
+
+    code = sparse_encode_na(Xo, observed_mask, D.T, alpha)
+
+    if return_code:
+        if return_n_iter:
+            return code, D.T, t_iter
+        else:
+            return code, D.T
+    if return_n_iter:
+        return D.T, t_iter
+    else:
+        return D.T
+
+
 class _BaseSparseCoding(TransformerMixin):
     """Base class from SparseCoder and DictionaryLearning algorithms."""
     def __init__(self, transform_algorithm, transform_n_nonzero_coefs,
@@ -1586,26 +1782,35 @@ class MiniBatchDictionaryLearning(_BaseSparseCoding, BaseEstimator):
             Returns the instance itself.
         """
         random_state = check_random_state(self.random_state)
-        X = self._validate_data(X)
+        X = self._validate_data(X, force_all_finite="allow-nan")
 
-        U, (A, B), self.n_iter_ = dict_learning_online(
-            X, self.n_components, alpha=self.alpha,
-            n_iter=self.n_iter, return_code=False,
-            method=self.fit_algorithm,
-            method_max_iter=self.transform_max_iter,
-            n_jobs=self.n_jobs, dict_init=self.dict_init,
-            batch_size=self.batch_size, shuffle=self.shuffle,
-            verbose=self.verbose, random_state=random_state,
-            return_inner_stats=True,
-            return_n_iter=True,
-            positive_dict=self.positive_dict,
-            positive_code=self.positive_code)
-        self.components_ = U
-        # Keep track of the state of the algorithm to be able to do
-        # some online fitting (partial_fit)
-        self.inner_stats_ = (A, B)
-        self.iter_offset_ = self.n_iter
-        self.random_state_ = random_state
+        if np.any(np.isnan(X)):
+            code, dictionary, self.n_iter_ = dict_learning_na(
+                X, self.n_components, self.alpha, ro=2,
+                n_iter=self.n_iter, return_n_iter=True)
+            self.components_ = dictionary
+            self.inner_stats_ = None
+            self.iter_offset_ = self.n_iter
+        else:
+            U, (A, B), self.n_iter_ = dict_learning_online(
+                X, self.n_components, alpha=self.alpha,
+                n_iter=self.n_iter, return_code=False,
+                method=self.fit_algorithm,
+                method_max_iter=self.transform_max_iter,
+                n_jobs=self.n_jobs, dict_init=self.dict_init,
+                batch_size=self.batch_size, shuffle=self.shuffle,
+                verbose=self.verbose, random_state=random_state,
+                return_inner_stats=True,
+                return_n_iter=True,
+                positive_dict=self.positive_dict,
+                positive_code=self.positive_code)
+            self.components_ = U
+            # Keep track of the state of the algorithm to be able to do
+            # some online fitting (partial_fit)
+            self.inner_stats_ = (A, B)
+            self.iter_offset_ = self.n_iter
+            self.random_state_ = random_state
+
         return self
 
     def partial_fit(self, X, y=None, iter_offset=None):
