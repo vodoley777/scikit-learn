@@ -5,6 +5,8 @@ Multi-dimensional Scaling (MDS).
 # author: Nelle Varoquaux <nelle.varoquaux@gmail.com>
 # License: BSD
 
+# weighted MDS option added by Baihan Lin <doerlbh@gmail.com>
+
 import numpy as np
 from joblib import Parallel, effective_n_jobs
 
@@ -19,7 +21,8 @@ from ..utils.fixes import delayed
 
 
 def _smacof_single(dissimilarities, metric=True, n_components=2, init=None,
-                   max_iter=300, verbose=0, eps=1e-3, random_state=None):
+                   max_iter=300, verbose=0, eps=1e-3, random_state=None,
+                   weight=None):
     """Computes multidimensional scaling using SMACOF algorithm.
 
     Parameters
@@ -54,6 +57,10 @@ def _smacof_single(dissimilarities, metric=True, n_components=2, init=None,
         Determines the random number generator used to initialize the centers.
         Pass an int for reproducible results across multiple function calls.
         See :term: `Glossary <random_state>`.
+
+    weight : ndarray of shape (n_samples, n_samples), default=None
+        symmetric weighting matrix of similarities.
+        In default, all weights are 1.
 
     Returns
     -------
@@ -112,10 +119,22 @@ def _smacof_single(dissimilarities, metric=True, n_components=2, init=None,
 
         # Update X using the Guttman transform
         dis[dis == 0] = 1e-5
-        ratio = disparities / dis
-        B = - ratio
-        B[np.arange(len(B)), np.arange(len(B))] += ratio.sum(axis=1)
-        X = 1. / n_samples * np.dot(B, X)
+        if weight is None:
+            ratio = disparities / dis
+            B = - ratio
+            B[np.arange(len(B)), np.arange(len(B))] += ratio.sum(axis=1)
+            X = 1. / n_samples * np.dot(B, X)
+        else:
+            ratio = weight * disparities / dis
+            B = - ratio
+            B[np.arange(len(B)), np.arange(len(B))] += ratio.sum(axis=1)
+            V = np.zeros((n_samples, n_samples))
+            for nn in range(n_samples):
+                for mm in range(nn, n_samples):
+                    v = np.zeros((n_samples, 1))
+                    v[nn], v[mm] = 1, -1
+                    V += weight[nn, mm] * np.dot(v, v.T)
+            X = np.dot(np.linalg.pinv(V), np.dot(B, X))
 
         dis = np.sqrt((X ** 2).sum(axis=1)).sum()
         if verbose >= 2:
@@ -133,7 +152,7 @@ def _smacof_single(dissimilarities, metric=True, n_components=2, init=None,
 
 def smacof(dissimilarities, *, metric=True, n_components=2, init=None,
            n_init=8, n_jobs=None, max_iter=300, verbose=0, eps=1e-3,
-           random_state=None, return_n_iter=False):
+           random_state=None, return_n_iter=False, weight=None):
     """Computes multidimensional scaling using the SMACOF algorithm.
 
     The SMACOF (Scaling by MAjorizing a COmplicated Function) algorithm is a
@@ -204,6 +223,10 @@ def smacof(dissimilarities, *, metric=True, n_components=2, init=None,
     return_n_iter : bool, default=False
         Whether or not to return the number of iterations.
 
+    weight : ndarray of shape (n_samples, n_samples), default=None
+        symmetric weighting matrix of similarities.
+        In default, all weights are 1.
+
     Returns
     -------
     X : ndarray of shape (n_samples, n_components)
@@ -249,7 +272,8 @@ def smacof(dissimilarities, *, metric=True, n_components=2, init=None,
                 dissimilarities, metric=metric,
                 n_components=n_components, init=init,
                 max_iter=max_iter, verbose=verbose,
-                eps=eps, random_state=random_state)
+                eps=eps, random_state=random_state,
+                weight=weight)
             if best_stress is None or stress < best_stress:
                 best_stress = stress
                 best_pos = pos.copy()
@@ -260,7 +284,7 @@ def smacof(dissimilarities, *, metric=True, n_components=2, init=None,
             delayed(_smacof_single)(
                 dissimilarities, metric=metric, n_components=n_components,
                 init=init, max_iter=max_iter, verbose=verbose, eps=eps,
-                random_state=seed)
+                random_state=seed, weight=weight)
             for seed in seeds)
         positions, stress, n_iters = zip(*results)
         best = np.argmin(stress)
@@ -400,7 +424,7 @@ class MDS(BaseEstimator):
     def _pairwise(self):
         return self.dissimilarity == "precomputed"
 
-    def fit(self, X, y=None, init=None):
+    def fit(self, X, y=None, init=None, weight=None):
         """
         Computes the position of the points in the embedding space.
 
@@ -417,11 +441,15 @@ class MDS(BaseEstimator):
             Starting configuration of the embedding to initialize the SMACOF
             algorithm. By default, the algorithm is initialized with a randomly
             chosen array.
+
+        weight : ndarray of shape (n_samples, n_samples), default=None
+            symmetric weighting matrix of similarities.
+            In default, all weights are 1.
         """
-        self.fit_transform(X, init=init)
+        self.fit_transform(X, init=init, weight=weight)
         return self
 
-    def fit_transform(self, X, y=None, init=None):
+    def fit_transform(self, X, y=None, init=None, weight=None):
         """
         Fit the data from X, and returns the embedded coordinates.
 
@@ -438,6 +466,9 @@ class MDS(BaseEstimator):
             Starting configuration of the embedding to initialize the SMACOF
             algorithm. By default, the algorithm is initialized with a randomly
             chosen array.
+        weight : ndarray of shape (n_samples, n_samples), default=None
+            symmetric weighting matrix of similarities.
+            In default, all weights are 1.
         """
         X = self._validate_data(X)
         if X.shape[0] == X.shape[1] and self.dissimilarity != "precomputed":
@@ -459,6 +490,6 @@ class MDS(BaseEstimator):
             n_components=self.n_components, init=init, n_init=self.n_init,
             n_jobs=self.n_jobs, max_iter=self.max_iter, verbose=self.verbose,
             eps=self.eps, random_state=self.random_state,
-            return_n_iter=True)
+            return_n_iter=True, weight=weight)
 
         return self.embedding_
