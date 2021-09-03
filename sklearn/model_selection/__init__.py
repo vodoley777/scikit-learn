@@ -66,7 +66,6 @@ __all__ = [
     "cross_val_predict",
     "cross_val_score",
     "cross_validate",
-    "fit_grid_point",
     "learning_curve",
     "permutation_test_score",
     "train_test_split",
