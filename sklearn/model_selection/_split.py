@@ -45,6 +45,7 @@ __all__ = [
     "GroupShuffleSplit",
     "StratifiedKFold",
     "StratifiedShuffleSplit",
+    "StratifiedGroupKFold",
     "PredefinedSplit",
     "train_test_split",
     "check_cv",
