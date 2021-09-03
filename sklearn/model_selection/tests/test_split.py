@@ -1846,17 +1846,14 @@ def test_group_time_series_fail_groups_are_none():
     X = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14]]
 
     # Should fail if the 'groups' is None
-    with pytest.raises(
-            ValueError,
-            match="The 'groups' parameter should not be None"):
+    with pytest.raises(ValueError, match="The 'groups' parameter should not be None"):
         next(GroupTimeSeriesSplit(n_splits=7).split(X))
 
 
 def test_group_time_series_ordering_and_group_preserved():
     # With this test we check that we are only evaluating
     # unseen groups in the future
-    groups = np.array(['a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c',
-                      'd', 'd', 'd'])
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
     n_samples = len(groups)
     n_splits = 3
 
@@ -1887,113 +1884,157 @@ def test_group_time_series_more_folds_than_group():
     groups = np.array([1, 1, 1, 2, 2])
     X = y = np.ones(len(groups))
     with pytest.raises(
-            ValueError,
-            match="Cannot have number of folds=4 greater"
-                  " than the number of groups=2"):
+        ValueError,
+        match="Cannot have number of folds=4 greater than the number of groups=2",
+    ):
         next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
 
 
 def test_group_time_series_max_train_size():
-    groups = np.array(['a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c',
-                       'd', 'd', 'd'])
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
     n_samples = len(groups)
     X = y = np.ones(n_samples)
-    splits = GroupTimeSeriesSplit(n_splits=3,
-                                  max_train_size=3).split(X, y, groups)
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=3).split(X, y, groups)
+    splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=3).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=3).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=3)
 
     # Test for the case where the size of a fold is greater than max_train_size
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=2).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=2).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
     # Test for the case where the size of each fold is less than max_train_size
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=5).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=5).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
 
 def test_group_time_series_non_overlap_group():
-    groups = np.array(['a', 'a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b',
-                       'c', 'c', 'c', 'c', 'd', 'd', 'd'])
+    groups = np.array(
+        [
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "b",
+            "b",
+            "b",
+            "b",
+            "b",
+            "c",
+            "c",
+            "c",
+            "c",
+            "d",
+            "d",
+            "d",
+        ]
+    )
     gtss = GroupTimeSeriesSplit(n_splits=3)
     splits = gtss.split(groups, groups=groups)
     train, test = next(splits)
     assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5]))
     assert_array_equal(test, np.array([6, 7, 8, 9, 10]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a',
-                                                'a', 'a', 'a']))
-    assert_array_equal(groups[test], np.array(['b', 'b', 'b', 'b', 'b']))
+    assert_array_equal(groups[train], np.array(["a", "a", "a", "a", "a", "a"]))
+    assert_array_equal(groups[test], np.array(["b", "b", "b", "b", "b"]))
 
     train, test = next(splits)
     assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
     assert_array_equal(test, np.array([11, 12, 13, 14]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a', 'a',
-                                                'a', 'a',
-                                                'b', 'b', 'b', 'b', 'b']))
-    assert_array_equal(groups[test], np.array(['c', 'c', 'c', 'c']))
+    assert_array_equal(
+        groups[train], np.array(["a", "a", "a", "a", "a", "a", "b", "b", "b", "b", "b"])
+    )
+    assert_array_equal(groups[test], np.array(["c", "c", "c", "c"]))
 
     train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8,
-                                        9, 10, 11, 12, 13, 14]))
+    assert_array_equal(
+        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+    )
     assert_array_equal(test, np.array([15, 16, 17]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a',
-                                                'a', 'a', 'a',
-                                                'b', 'b', 'b', 'b', 'b',
-                                                'c', 'c', 'c', 'c']))
-    assert_array_equal(groups[test], ['d', 'd', 'd'])
+    assert_array_equal(
+        groups[train],
+        np.array(
+            ["a", "a", "a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c"]
+        ),
+    )
+    assert_array_equal(groups[test], ["d", "d", "d"])
 
 
 def test_group_time_series_non_continuous():
-    groups = np.array(['a', 'a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b',
-                       'c', 'c', 'c', 'c', 'a', 'd', 'd'])
+    groups = np.array(
+        [
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "b",
+            "b",
+            "b",
+            "b",
+            "b",
+            "c",
+            "c",
+            "c",
+            "c",
+            "a",
+            "d",
+            "d",
+        ]
+    )
     X = y = np.ones(len(groups))
     with pytest.raises(
-            ValueError,
-            match="The groups should be continuous."
-                  " Found a non-countinuous group at"
-                  " index=15"):
+        ValueError,
+        match=(
+            "The groups should be continuous. Found a non-countinuous group at index=15"
+        ),
+    ):
         next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
 
 
-@pytest.mark.parametrize('cv, expected', [
-    (KFold(), True),
-    (KFold(shuffle=True, random_state=123), True),
-    (StratifiedKFold(), True),
-    (StratifiedKFold(shuffle=True, random_state=123), True),
-    (RepeatedKFold(random_state=123), True),
-    (RepeatedStratifiedKFold(random_state=123), True),
-    (ShuffleSplit(random_state=123), True),
-    (GroupShuffleSplit(random_state=123), True),
-    (StratifiedShuffleSplit(random_state=123), True),
-    (GroupKFold(), True),
-    (TimeSeriesSplit(), True),
-    (LeaveOneOut(), True),
-    (LeaveOneGroupOut(), True),
-    (LeavePGroupsOut(n_groups=2), True),
-    (LeavePOut(p=2), True),
-
-    (KFold(shuffle=True, random_state=None), False),
-    (KFold(shuffle=True, random_state=None), False),
-    (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)),
-     False),
-    (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)),
-     False),
-    (RepeatedKFold(random_state=None), False),
-    (RepeatedKFold(random_state=np.random.RandomState(0)), False),
-    (RepeatedStratifiedKFold(random_state=None), False),
-    (RepeatedStratifiedKFold(random_state=np.random.RandomState(0)), False),
-    (ShuffleSplit(random_state=None), False),
-    (ShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (GroupShuffleSplit(random_state=None), False),
-    (GroupShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (StratifiedShuffleSplit(random_state=None), False),
-    (StratifiedShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (GroupTimeSeriesSplit(), True),
-    (GroupTimeSeriesSplit(n_splits=3), True),
-    (GroupTimeSeriesSplit(n_splits=3, max_train_size=3), True),
-])
+@pytest.mark.parametrize(
+    "cv, expected",
+    [
+        (KFold(), True),
+        (KFold(shuffle=True, random_state=123), True),
+        (StratifiedKFold(), True),
+        (StratifiedKFold(shuffle=True, random_state=123), True),
+        (RepeatedKFold(random_state=123), True),
+        (RepeatedStratifiedKFold(random_state=123), True),
+        (ShuffleSplit(random_state=123), True),
+        (GroupShuffleSplit(random_state=123), True),
+        (StratifiedShuffleSplit(random_state=123), True),
+        (GroupKFold(), True),
+        (TimeSeriesSplit(), True),
+        (LeaveOneOut(), True),
+        (LeaveOneGroupOut(), True),
+        (LeavePGroupsOut(n_groups=2), True),
+        (LeavePOut(p=2), True),
+        (KFold(shuffle=True, random_state=None), False),
+        (KFold(shuffle=True, random_state=None), False),
+        (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)), False),
+        (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)), False),
+        (RepeatedKFold(random_state=None), False),
+        (RepeatedKFold(random_state=np.random.RandomState(0)), False),
+        (RepeatedStratifiedKFold(random_state=None), False),
+        (RepeatedStratifiedKFold(random_state=np.random.RandomState(0)), False),
+        (ShuffleSplit(random_state=None), False),
+        (ShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (GroupShuffleSplit(random_state=None), False),
+        (GroupShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (StratifiedShuffleSplit(random_state=None), False),
+        (StratifiedShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (GroupTimeSeriesSplit(), True),
+        (GroupTimeSeriesSplit(n_splits=3), True),
+        (GroupTimeSeriesSplit(n_splits=3, max_train_size=3), True),
+    ],
+)
 def test_yields_constant_splits(cv, expected):
     assert _yields_constant_splits(cv) == expected

@@ -1,7 +1,6 @@
 import typing
 
 from ._split import BaseCrossValidator
-from ._split import BaseShuffleSplit
 from ._split import KFold
 from ._split import GroupKFold
 from ._split import StratifiedKFold
@@ -15,7 +14,6 @@ from ._split import RepeatedStratifiedKFold
 from ._split import ShuffleSplit
 from ._split import GroupShuffleSplit
 from ._split import StratifiedShuffleSplit
-from ._split import StratifiedGroupKFold
 from ._split import PredefinedSplit
 from ._split import train_test_split
 from ._split import check_cv
@@ -42,32 +40,34 @@ if typing.TYPE_CHECKING:
     )
 
 
-__all__ = ['BaseCrossValidator',
-           'GridSearchCV',
-           'TimeSeriesSplit',
-           'KFold',
-           'GroupKFold',
-           'GroupShuffleSplit',
-           'LeaveOneGroupOut',
-           'LeaveOneOut',
-           'LeavePGroupsOut',
-           'LeavePOut',
-           'RepeatedKFold',
-           'RepeatedStratifiedKFold',
-           'ParameterGrid',
-           'ParameterSampler',
-           'PredefinedSplit',
-           'RandomizedSearchCV',
-           'ShuffleSplit',
-           'StratifiedKFold',
-           'StratifiedShuffleSplit',
-           'check_cv',
-           'cross_val_predict',
-           'cross_val_score',
-           'cross_validate',
-           'fit_grid_point',
-           'learning_curve',
-           'permutation_test_score',
-           'train_test_split',
-           'validation_curve',
-           'GroupTimeSeriesSplit']
+__all__ = [
+    "BaseCrossValidator",
+    "GridSearchCV",
+    "TimeSeriesSplit",
+    "KFold",
+    "GroupKFold",
+    "GroupShuffleSplit",
+    "LeaveOneGroupOut",
+    "LeaveOneOut",
+    "LeavePGroupsOut",
+    "LeavePOut",
+    "RepeatedKFold",
+    "RepeatedStratifiedKFold",
+    "ParameterGrid",
+    "ParameterSampler",
+    "PredefinedSplit",
+    "RandomizedSearchCV",
+    "ShuffleSplit",
+    "StratifiedKFold",
+    "StratifiedShuffleSplit",
+    "check_cv",
+    "cross_val_predict",
+    "cross_val_score",
+    "cross_validate",
+    "fit_grid_point",
+    "learning_curve",
+    "permutation_test_score",
+    "train_test_split",
+    "validation_curve",
+    "GroupTimeSeriesSplit",
+]

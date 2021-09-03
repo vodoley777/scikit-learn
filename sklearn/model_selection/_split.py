@@ -31,23 +31,25 @@ from ..utils.multiclass import type_of_target
 from ..base import _pprint
 
 
-__all__ = ['BaseCrossValidator',
-           'KFold',
-           'GroupKFold',
-           'LeaveOneGroupOut',
-           'LeaveOneOut',
-           'LeavePGroupsOut',
-           'LeavePOut',
-           'RepeatedStratifiedKFold',
-           'RepeatedKFold',
-           'ShuffleSplit',
-           'GroupShuffleSplit',
-           'StratifiedKFold',
-           'StratifiedShuffleSplit',
-           'PredefinedSplit',
-           'train_test_split',
-           'check_cv',
-           'GroupTimeSeriesSplit']
+__all__ = [
+    "BaseCrossValidator",
+    "KFold",
+    "GroupKFold",
+    "LeaveOneGroupOut",
+    "LeaveOneOut",
+    "LeavePGroupsOut",
+    "LeavePOut",
+    "RepeatedStratifiedKFold",
+    "RepeatedKFold",
+    "ShuffleSplit",
+    "GroupShuffleSplit",
+    "StratifiedKFold",
+    "StratifiedShuffleSplit",
+    "PredefinedSplit",
+    "train_test_split",
+    "check_cv",
+    "GroupTimeSeriesSplit",
+]
 
 
 class BaseCrossValidator(metaclass=ABCMeta):
@@ -2559,13 +2561,9 @@ class GroupTimeSeriesSplit(_BaseKFold):
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b' 'c' 'c' 'c' 'c']\
     TEST GROUP: ['d' 'd' 'd']
     """
+
     @_deprecate_positional_args
-    def __init__(self,
-                 n_splits=5,
-                 *,
-                 max_train_size=None,
-                 test_size=None,
-                 gap=0):
+    def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
         super().__init__(n_splits, shuffle=False, random_state=None)
         self.max_train_size = max_train_size
         self.test_size = test_size
@@ -2596,8 +2594,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
             The testing set indices for that split.
         """
         if groups is None:
-            raise ValueError(
-                "The 'groups' parameter should not be None")
+            raise ValueError("The 'groups' parameter should not be None")
         X, y, groups = indexable(X, y, groups)
         n_samples = _num_samples(X)
         n_splits = self.n_splits
@@ -2608,34 +2605,39 @@ class GroupTimeSeriesSplit(_BaseKFold):
         n_samples = _num_samples(X)
         n_groups = _num_samples(unique_groups)
         for idx in np.arange(n_samples):
-            if (groups[idx] in group_dict):
-                if (idx - group_dict[groups[idx]][-1] == 1):
+            if groups[idx] in group_dict:
+                if idx - group_dict[groups[idx]][-1] == 1:
                     group_dict[groups[idx]].append(idx)
                 else:
                     raise ValueError(
-                        ("The groups should be continuous."
-                         " Found a non-countinuous group at"
-                         " index={0}").format(idx))
+                        (
+                            "The groups should be continuous."
+                            " Found a non-countinuous group at"
+                            " index={0}"
+                        ).format(idx)
+                    )
             else:
                 group_dict[groups[idx]] = [idx]
             if n_folds > n_groups:
                 raise ValueError(
-                    ("Cannot have number of folds={0} greater than"
-                     " the number of groups={1}").format(n_folds,
-                                                         n_groups))
-        tss = TimeSeriesSplit(gap=self.gap,
-                              max_train_size=None,
-                              n_splits=n_splits, test_size=self.test_size)
+                    (
+                        "Cannot have number of folds={0} greater than"
+                        " the number of groups={1}"
+                    ).format(n_folds, n_groups)
+                )
+        tss = TimeSeriesSplit(
+            gap=self.gap,
+            max_train_size=None,
+            n_splits=n_splits,
+            test_size=self.test_size,
+        )
 
         for train_idx, test_idx in tss.split(unique_groups):
-            train_array = list(np.where(np.isin(groups,
-                               unique_groups[train_idx]))[0])
-            test_array = list(np.where(np.isin(groups,
-                              unique_groups[test_idx]))[0])
+            train_array = list(np.where(np.isin(groups, unique_groups[train_idx]))[0])
+            test_array = list(np.where(np.isin(groups, unique_groups[test_idx]))[0])
             train_end = len(train_array)
             if self.max_train_size and self.max_train_size < train_end:
-                train_array = train_array[train_end -
-                                          self.max_train_size:train_end]
+                train_array = train_array[train_end - self.max_train_size : train_end]
             yield train_array, test_array
 
 
