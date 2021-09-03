@@ -2311,10 +2311,13 @@ class GroupTimeSeriesSplit(_BaseKFold):
     def __init__(self,
                  n_splits=5,
                  *,
-                 max_train_size=None
-                 ):
+                 max_train_size=None,
+                 test_size=None,
+                 gap=0):
         super().__init__(n_splits, shuffle=False, random_state=None)
         self.max_train_size = max_train_size
+        self.test_size = test_size
+        self.gap = gap
 
     def split(self, X, y=None, groups=None):
         """Generate indices to split data into training and test set.
@@ -2363,36 +2366,25 @@ class GroupTimeSeriesSplit(_BaseKFold):
                          " index={0}").format(idx))
             else:
                 group_dict[groups[idx]] = [idx]
-        if n_folds > n_groups:
-            raise ValueError(
-                ("Cannot have number of folds={0} greater than"
-                 " the number of groups={1}").format(n_folds,
-                                                     n_groups))
-        group_test_size = n_groups // n_folds
-        group_test_starts = range(n_groups - n_splits * group_test_size,
-                                  n_groups, group_test_size)
-        for group_test_start in group_test_starts:
-            train_array = []
-            test_array = []
-            for train_group_idx in unique_groups[:group_test_start]:
-                train_array_tmp = group_dict[train_group_idx]
-                train_array = np.sort(np.unique(
-                                      np.concatenate((train_array,
-                                                      train_array_tmp)),
-                                      axis=None), axis=None)
-            train_end = train_array.size
+            if n_folds > n_groups:
+                raise ValueError(
+                    ("Cannot have number of folds={0} greater than"
+                     " the number of groups={1}").format(n_folds,
+                                                         n_groups))
+        tss = TimeSeriesSplit(gap=self.gap,
+                              max_train_size=None,
+                              n_splits=n_splits, test_size=self.test_size)
+
+        for train_idx, test_idx in tss.split(unique_groups):
+            train_array = list(np.where(np.isin(groups,
+                               unique_groups[train_idx]))[0])
+            test_array = list(np.where(np.isin(groups,
+                              unique_groups[test_idx]))[0])
+            train_end = len(train_array)
             if self.max_train_size and self.max_train_size < train_end:
                 train_array = train_array[train_end -
                                           self.max_train_size:train_end]
-            for test_group_idx in unique_groups[group_test_start:
-                                                group_test_start +
-                                                group_test_size]:
-                test_array_tmp = group_dict[test_group_idx]
-                test_array = np.sort(np.unique(
-                                              np.concatenate((test_array,
-                                                              test_array_tmp)),
-                                     axis=None), axis=None)
-            yield [int(i) for i in train_array], [int(i) for i in test_array]
+            yield train_array, test_array
 
 
 def _yields_constant_splits(cv):
