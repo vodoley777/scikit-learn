@@ -2538,6 +2538,17 @@ class GroupTimeSeriesSplit(_BaseKFold):
     max_train_size : int, default=None
         Maximum size for a single training set.
 
+    test_size : int, default=None
+        Used to limit the size of the test set. Defaults to
+        ``n_samples // (n_splits + 1)``, which is the maximum allowed value
+        with ``gap=0``.
+
+    gap : int, default=0
+        Number of samples to exclude from the end of each train set before
+        the test set.
+
+
+
     Examples
     --------
     >>> import numpy as np
