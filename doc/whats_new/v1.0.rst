@@ -385,6 +385,10 @@ Changelog
   target. Additional private refactoring was performed.
   :pr:`19162` by :user:`Guillaume Lemaitre <glemaitre>`.
 
+- |Fix| Fixed inaccurate anomaly score in
+  :class:`ensemble.IsolationForest`.
+  :pr:`19087` by :user:`Konrad <Konrad0>`.
+
 - |Fix| Improve numerical precision for weights boosting in
   :class:`ensemble.AdaBoostClassifier` and :class:`ensemble.AdaBoostRegressor`
   to avoid underflows.
