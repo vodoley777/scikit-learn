@@ -22,7 +22,7 @@ from scipy import linalg
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-from sklearn import mixture
+from sklearn.mixture import GaussianMixtureIC
 
 print(__doc__)
 
@@ -35,25 +35,32 @@ C = np.array([[0., -0.1], [1.7, .4]])
 X = np.r_[np.dot(np.random.randn(n_samples, 2), C),
           .7 * np.random.randn(n_samples, 2) + np.array([-6, 3])]
 
-lowest_bic = np.infty
 bic = []
 n_components_range = range(1, 7)
 cv_types = ['spherical', 'tied', 'diag', 'full']
+
+# Fit Gaussian mixture with EM for a range of n_components and cv_types
+gmIC = GaussianMixtureIC(
+    min_components=n_components_range[0],
+    max_components=n_components_range[-1],
+    covariance_type=cv_types, random_state=0
+)
+gmIC.fit(X)
+results = gmIC.results_
 for cv_type in cv_types:
     for n_components in n_components_range:
-        # Fit a Gaussian mixture with EM
-        gmm = mixture.GaussianMixture(n_components=n_components,
-                                      covariance_type=cv_type)
-        gmm.fit(X)
-        bic.append(gmm.bic(X))
-        if bic[-1] < lowest_bic:
-            lowest_bic = bic[-1]
-            best_gmm = gmm
+        bic.append(min([
+            result.criterion
+            for result in results
+            if (result.covariance_type == cv_type)
+            and (result.n_components == n_components)
+        ]))
 
 bic = np.array(bic)
 color_iter = itertools.cycle(['navy', 'turquoise', 'cornflowerblue',
                               'darkorange'])
-clf = best_gmm
+
+clf = gmIC.best_model_
 bars = []
 
 # Plot the BIC scores
@@ -94,7 +101,7 @@ for i, (mean, cov, color) in enumerate(zip(clf.means_, clf.covariances_,
 
 plt.xticks(())
 plt.yticks(())
-plt.title(f'Selected GMM: {best_gmm.covariance_type} model, '
-          f'{best_gmm.n_components} components')
+plt.title(f'Selected GMM: {clf.covariance_type} model, '
+          f'{clf.n_components} components')
 plt.subplots_adjust(hspace=.35, bottom=.02)
 plt.show()
