@@ -490,7 +490,7 @@ Changelog
   clickable. :pr:`21298` by `Thomas Fan`_.
 
 :mod:`sklearn.gaussian_process`
-....................
+...............................
 
 - |Enhancement| The methods `predict` and `predict_proba` of
   :class:`gaussian_process.GaussianProcessClassifier` now expose
