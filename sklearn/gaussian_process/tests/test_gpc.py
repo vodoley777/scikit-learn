@@ -260,3 +260,51 @@ def test_warning_bounds():
         "Increasing the bound and calling "
         "fit again may find a better value."
     )
+
+
+def test_std_of_f_size():
+    gpc = GaussianProcessClassifier()
+
+    # Let's test it with something similar to the XOR operation
+    X = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    y = np.array([0.0, 1.0, 1.0, 0.0])
+    gpc.fit(X, y)
+
+    # Let's check the uncertainties of these.
+    # the point at the middle should be higher?
+    X_test = np.array([[0.5, 0.5], [0.4, 0.5], [0.5, 0.4]])
+    _, f_std = gpc.predict(X_test, return_std_of_f=True)
+
+    assert f_std.shape == (X_test.shape[0],)
+
+
+def test_std_of_f_same_vals():
+    gpc = GaussianProcessClassifier()
+
+    # Let's test it with something similar to the XOR operation
+    X = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    y = np.array([0.0, 1.0, 1.0, 0.0])
+    gpc.fit(X, y)
+
+    X_test = np.array([[0.5, 0.5], [0.4, 0.5], [0.5, 0.4]])
+    _, f_std_predict = gpc.predict(X_test, return_std_of_f=True)
+    _, f_std_predict_proba = gpc.predict_proba(X_test, return_std_of_f=True)
+
+    assert_array_equal(f_std_predict, f_std_predict_proba)
+
+
+def test_std_error_throwing():
+    gpc_multiclass = GaussianProcessClassifier()
+
+    X = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    y = np.array([0.0, 1.0, 1.0, 2.0])
+    gpc_multiclass.fit(X, y)
+
+    X_test = np.array([[0.5, 0.5], [0.4, 0.5], [0.5, 0.4]])
+    try:
+        _, _ = gpc_multiclass.predict(X_test, return_std_of_f=True)
+        raise AssertionError(
+            "Returning std of f is not (yet) implemented for multiclass classification"
+        )
+    except ValueError:
+        pass
