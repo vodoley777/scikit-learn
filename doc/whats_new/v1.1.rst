@@ -273,6 +273,19 @@ Changelog
   F-statistic).
   :pr:`17819` by :user:`Juan Carlos Alfaro Jiménez <alfaro96>`.
 
+:mod:`sklearn.gaussian_process`
+...............................
+
+- |Fix| :class:`gaussian_process.GaussianProcessClassifier` raises
+  a more informative error if `CompoundKernel` is passed via `kernel`.
+  :pr:`22223` by :user:`MarcoM <marcozzxx810>`.
+
+- |Enhancement| The methods `predict` and `predict_proba` of
+  :class:`gaussian_process.GaussianProcessClassifier` now expose
+  the standard deviation of the latent function f with a
+  `return_std_of_f` flag. :pr:`22227` by
+  :user:`Miguel González Duque <miguelgondu>`
+
 :mod:`sklearn.impute`
 .....................
 
@@ -489,14 +502,7 @@ Changelog
   left corner of the HTML representation to show how the elements are
   clickable. :pr:`21298` by `Thomas Fan`_.
 
-:mod:`sklearn.gaussian_process`
-...............................
 
-- |Enhancement| The methods `predict` and `predict_proba` of
-  :class:`gaussian_process.GaussianProcessClassifier` now expose
-  the standard deviation of the latent function f with a
-  `return_std_of_f` flag. :pr:`22227` by
-  :user:`Miguel González Duque <miguelgondu>`
 
 Code and Documentation Contributors
 -----------------------------------
