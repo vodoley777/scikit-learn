@@ -334,6 +334,14 @@ Changelog
   a more informative error if `CompoundKernel` is passed via `kernel`.
   :pr:`22223` by :user:`MarcoM <marcozzxx810>`.
 
+:mod:`sklearn.feature_extraction`
+............................
+
+- |Enhancement| :class:`feature_extraction.text.CountVectorizer` and
+  `feature_extraction.text.TfidfVectorizer` added a parameter `out_of_vocab_features`
+  to add count and hash-bag counts for out-of-vocabulary matches.
+  :pr:`21801` by :user:`Geoff McDonald <glmcdona>`.
+
 :mod:`sklearn.impute`
 .....................
 
