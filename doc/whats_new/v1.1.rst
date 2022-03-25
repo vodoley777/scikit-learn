@@ -496,6 +496,15 @@ Changelog
   the output feature names.
   :pr:`21762` by :user:`Zhehao Liu <MaxwellLZH>` and `Thomas Fan`_.
 
+:mod:`sklearn.feature_selection`
+.................................
+
+- |Enhancement| Enabled parallel processing for
+  :func:`feature_selection.mutual_info_regression` and
+  :func:`feature_selection.mutual_info_classif` by offering
+  n_jobs parameters.
+  :pr:`21409` by :user:`Bingo Li <Bingoko>`.
+
 :mod:`sklearn.impute`
 .....................
 

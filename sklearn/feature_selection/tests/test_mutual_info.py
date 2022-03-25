@@ -23,6 +23,7 @@ def test_compute_mi_dd():
     I_xy = H_x + H_y - H_xy
 
     assert_almost_equal(_compute_mi(x, y, True, True), I_xy)
+    assert_almost_equal(_compute_mi(x, y, True, True, n_jobs=2), I_xy)
 
 
 def test_compute_mi_cc(global_dtype):
@@ -56,6 +57,10 @@ def test_compute_mi_cc(global_dtype):
     for n_neighbors in [3, 5, 7]:
         I_computed = _compute_mi(x, y, False, False, n_neighbors)
         assert_allclose(I_computed, I_theory, rtol=1e-1)
+
+    for n_neighbors in [3, 5, 7]:
+        I_computed_ = _compute_mi(x, y, False, False, n_neighbors, n_jobs=2)
+        assert_almost_equal(I_computed_, I_theory, 1)
 
 
 def test_compute_mi_cd():
@@ -94,6 +99,10 @@ def test_compute_mi_cd():
             I_computed = _compute_mi(x, y, True, False, n_neighbors)
             assert_almost_equal(I_computed, I_theory, 1)
 
+        for n_neighbors in [3, 5, 7]:
+            I_computed_ = _compute_mi(x, y, True, False, n_neighbors, n_jobs=2)
+            assert_almost_equal(I_computed_, I_theory, 1)
+
 
 def test_compute_mi_cd_unique_label():
     # Test that adding unique label doesn't change MI.
@@ -106,12 +115,15 @@ def test_compute_mi_cd_unique_label():
     y[~mask] = np.random.uniform(0, 2, size=np.sum(~mask))
 
     mi_1 = _compute_mi(x, y, True, False)
+    mi_1_ = _compute_mi(x, y, True, False, n_jobs=2)
 
     x = np.hstack((x, 2))
     y = np.hstack((y, 10))
     mi_2 = _compute_mi(x, y, True, False)
+    mi_2_ = _compute_mi(x, y, True, False, n_jobs=2)
 
     assert mi_1 == mi_2
+    assert mi_1_ == mi_2_
 
 
 # We are going test that feature ordering by MI matches our expectations.
@@ -143,6 +155,9 @@ def test_mutual_info_regression():
     mi = mutual_info_regression(X, y, random_state=0)
     assert_array_equal(np.argsort(-mi), np.array([1, 2, 0]))
 
+    mi_ = mutual_info_regression(X, y, random_state=0, n_jobs=2)
+    assert_array_equal(np.argsort(-mi_), np.array([1, 2, 0]))
+
 
 def test_mutual_info_classif_mixed():
     # Here the target is discrete and there are two continuous and one
@@ -166,6 +181,27 @@ def test_mutual_info_classif_mixed():
         # The n_neighbors should not have any effect on the discrete value
         # The MI should be the same
         assert mi_nn[2] == mi[2]
+
+    mi_ = mutual_info_classif(
+        X, y, discrete_features=[2], n_neighbors=3, random_state=0, n_jobs=2
+    )
+    assert_array_equal(np.argsort(-mi_), [2, 0, 1])
+    for n_neighbors in [5, 7, 9]:
+        mi_nn_ = mutual_info_classif(
+            X,
+            y,
+            discrete_features=[2],
+            n_neighbors=n_neighbors,
+            random_state=0,
+            n_jobs=2,
+        )
+        # Check that the continuous values have an higher MI with greater
+        # n_neighbors
+        assert mi_nn_[0] > mi_[0]
+        assert mi_nn_[1] > mi_[1]
+        # The n_neighbors should not have any effect on the discrete value
+        # The MI should be the same
+        assert mi_nn_[2] == mi_[2]
 
 
 def test_mutual_info_options():
