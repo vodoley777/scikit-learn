@@ -11,10 +11,12 @@ This example visualizes the behavior of several common scikit-learn objects
 for comparison.
 """
 
-from sklearn.model_selection import (TimeSeriesSplit, KFold, ShuffleSplit,
+from sklearn.model_selection import (GroupTimeSeriesSplit, TimeSeriesSplit,
+                                     KFold, ShuffleSplit,
                                      StratifiedKFold, GroupShuffleSplit,
                                      GroupKFold, StratifiedShuffleSplit,
                                      StratifiedGroupKFold)
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -47,6 +49,10 @@ y = np.hstack([[ii] * int(100 * perc)
 
 # Evenly spaced groups repeated once
 groups = np.hstack([[ii] * 10 for ii in range(10)])
+
+# Un-Evenly spaced groups repeated once
+unevengroups = np.hstack([[ii] * 10 if ii % 3 else [ii] * 5
+                          for ii in range(12)])
 
 
 def visualize_groups(classes, groups, name):
@@ -151,12 +157,15 @@ for cv in cvs:
 # Note how some use the group/class information while others do not.
 
 cvs = [KFold, GroupKFold, ShuffleSplit, StratifiedKFold, StratifiedGroupKFold,
-       GroupShuffleSplit, StratifiedShuffleSplit, TimeSeriesSplit]
+       GroupShuffleSplit, StratifiedShuffleSplit, TimeSeriesSplit,
+       GroupTimeSeriesSplit]
 
 
 for cv in cvs:
     this_cv = cv(n_splits=n_splits)
     fig, ax = plt.subplots(figsize=(6, 3))
+    if cv == GroupTimeSeriesSplit:
+        groups = unevengroups
     plot_cv_indices(this_cv, X, y, groups, ax, n_splits)
 
     ax.legend([Patch(color=cmap_cv(.8)), Patch(color=cmap_cv(.02))],
