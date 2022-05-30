@@ -2536,16 +2536,14 @@ class GroupTimeSeriesSplit(_BaseKFold):
         Number of splits. Must be at least 2.
 
     max_train_size : int, default=None
-        Maximum size for a single training set.
+        Maximum size for a single training group.
 
     test_size : int, default=None
-        Used to limit the size of the test set. Defaults to
-        ``n_samples // (n_splits + 1)``, which is the maximum allowed value
-        with ``gap=0``.
+        Used to limit the size of the test group.
 
     gap : int, default=0
-        Number of samples to exclude from the end of each train set before
-        the test set.
+        Number of groups to exclude from the end of each training group
+        before the test group.
 
 
 
@@ -2641,15 +2639,17 @@ class GroupTimeSeriesSplit(_BaseKFold):
             gap=self.gap,
             max_train_size=None,
             n_splits=n_splits,
-            test_size=self.test_size,
+            test_size=None,
         )
 
         for train_idx, test_idx in tss.split(unique_groups):
-            train_array = list(np.where(np.isin(groups, unique_groups[train_idx]))[0])
-            test_array = list(np.where(np.isin(groups, unique_groups[test_idx]))[0])
+            train_array = np.where(np.isin(groups, unique_groups[train_idx]))[0]
+            test_array = np.where(np.isin(groups, unique_groups[test_idx]))[0]
             train_end = len(train_array)
             if self.max_train_size and self.max_train_size < train_end:
                 train_array = train_array[train_end - self.max_train_size : train_end]
+            if self.test_size:
+                test_array = test_array[:self.test_size]
             yield train_array, test_array
 
 
