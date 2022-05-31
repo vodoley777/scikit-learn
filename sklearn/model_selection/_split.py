@@ -46,10 +46,10 @@ __all__ = [
     "StratifiedKFold",
     "StratifiedShuffleSplit",
     "StratifiedGroupKFold",
+    "GroupTimeSeriesSplit",
     "PredefinedSplit",
     "train_test_split",
     "check_cv",
-    "GroupTimeSeriesSplit",
 ]
 
 

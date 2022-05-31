@@ -17,6 +17,7 @@ from sklearn.model_selection import (GroupTimeSeriesSplit, TimeSeriesSplit,
                                      GroupShuffleSplit, GroupKFold,
                                      StratifiedShuffleSplit)
 
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -157,7 +158,7 @@ for cv in cvs:
 # Note how some use the group/class information while others do not.
 
 
-cvs = [KFold, GroupKFold, ShuffleSplit, StratifiedKFold,
+cvs = [KFold, GroupKFold, ShuffleSplit, StratifiedKFold, StratifiedGroupKFold,
        GroupShuffleSplit, StratifiedShuffleSplit, TimeSeriesSplit,
        GroupTimeSeriesSplit]
 
