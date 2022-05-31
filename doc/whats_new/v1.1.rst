@@ -181,9 +181,6 @@ Changelog
     Changes not specific to a module should be listed under *Multiple Modules*
     or *Miscellaneous*.
     Entries should end with:
-    - |MajorFeature| :class:`model_selection.GroupTimeSeriesSplit` is a Time Series
-      cross-validator variant with non-overlapping groups.
-      :pr:`16236` by :user:`Gaurav Chawla <getgaurav2>`.
 
     :pr:`123456` by :user:`Joe Bloggs <joeongithub>`.
     where 123456 is the *pull request* number, not the issue number.
