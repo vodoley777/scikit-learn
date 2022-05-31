@@ -181,7 +181,6 @@ Changelog
     Changes not specific to a module should be listed under *Multiple Modules*
     or *Miscellaneous*.
     Entries should end with:
-
     :pr:`123456` by :user:`Joe Bloggs <joeongithub>`.
     where 123456 is the *pull request* number, not the issue number.
 
