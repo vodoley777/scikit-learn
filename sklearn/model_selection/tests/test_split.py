@@ -1913,7 +1913,7 @@ def test_group_time_series_ordering_and_group_preserved():
     splits = gtf.split(X, y, groups)
 
     # Get all the other entries for the groups found in test
-    for (train, test) in splits:
+    for train, test in splits:
         # verify that they are not in the test set
         assert len(np.intersect1d(groups[train], groups[test])) == 0
         # All the elements in the train set should be in past of the

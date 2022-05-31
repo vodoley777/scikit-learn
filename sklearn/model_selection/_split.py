@@ -2660,7 +2660,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
             if self.max_train_size and self.max_train_size < train_end:
                 train_array = train_array[train_end - self.max_train_size : train_end]
             if self.test_size:
-                test_array = test_array[:self.test_size]
+                test_array = test_array[: self.test_size]
             yield train_array, test_array
 
 
