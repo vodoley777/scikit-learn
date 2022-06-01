@@ -932,13 +932,13 @@ Example of 3-split time series cross-validation on a dataset with
     ...     print("TRAIN:", train_idx, "TEST:", test_idx)
     ...     print("TRAIN GROUP:", groups[train_idx],
     ...           "TEST GROUP:", groups[test_idx])
-    TRAIN: [0 1 2 3 4 5] TEST: [6 7 8 9 10]
+    TRAIN: [0 1 2 3 4 5] TEST: [ 6  7  8  9 10]
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a']
     TEST GROUP: ['b' 'b' 'b' 'b' 'b']
-    TRAIN: [0 1 2 3 4 5 6 7 8 9 10] TEST: [11 12 13 14]
+    TRAIN: [ 0  1  2  3  4  5  6  7  8  9 10] TEST: [11 12 13 14]
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b']
     TEST GROUP: ['c' 'c' 'c' 'c']
-    TRAIN: [0 1 2 3 4 5 6 7 8 9 10 11 12 13 14]
+    TRAIN: [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14]
     TEST: [15 16 17]
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b' 'c' 'c' 'c' 'c']
     TEST GROUP: ['d' 'd' 'd']
