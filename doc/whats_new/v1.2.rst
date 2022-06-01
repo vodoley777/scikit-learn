@@ -96,7 +96,7 @@ Changelog
   :user:`Arturo Amor <ArturoAmorQ>`.
 
 :mod:`sklearn.model_selection`
-........................
+..............................
   
 - |MajorFeature| :class:`model_selection.GroupTimeSeriesSplit` is a Time Series
   cross-validator variant with non-overlapping groups.
