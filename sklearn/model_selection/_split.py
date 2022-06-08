@@ -2511,33 +2511,32 @@ def _build_repr(self):
 class GroupTimeSeriesSplit(_BaseKFold):
     """Time Series cross-validator variant with non-overlapping groups.
 
-    Provides train/test indices to split time series data samples
-    that are observed at fixed time intervals according to a
-    third-party provided group.
+    Provides train/test indices to split time series data samples that are
+    observed at fixed time intervals according to a third-party provided group.
     In each split, test indices must be higher than before, and thus shuffling
     in cross validator is inappropriate.
 
-    This cross-validation object is a variation of :class:`KFold`.
-    In the kth split, it returns first k folds as train set and the
-    (k+1)th fold as test set.
+    This cross-validation object is a variation of :class:`KFold`. In the kth
+    split, it returns first k folds as train set and the (k+1)th fold as test
+    set.
 
     The same group will not appear in two different folds (the number of
     distinct groups has to be at least equal to the number of folds).
 
-    Note that unlike standard cross-validation methods, successive
-    training sets are supersets of those that come before them.
+    Note that unlike standard cross-validation methods, successive training
+    sets are supersets of those that come before them.
 
-    The groups should be continuous. For Example:
-    np.array(['a', 'a', 'a', 'a', 'a', 'a',\
-                           'b', 'b', 'b', 'b', 'b',\
-                           'c', 'c', 'c', 'c',\
-                           'd', 'd', 'd'])
+    The group labels should be continuous such as the following:
+
+    valid_groups = np.array([
+        'a', 'a', 'b', 'b', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd'
+    ])
 
     Non-continuous groups like below will give an error.
-    np.array(['a', 'a', 'a', 'a', 'a', 'a',\
-                           'b', 'b', 'b', 'b', 'b',\
-                           'a', 'c', 'c', 'c',\
-                           'b', 'd', 'd'])
+
+    invalid_groups = np.array([
+        'a', 'a', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd'
+    ])
 
     Read more in the :ref:`User Guide <cross_validation>`.
 
@@ -2553,34 +2552,28 @@ class GroupTimeSeriesSplit(_BaseKFold):
         Used to limit the size of the test group.
 
     gap : int, default=0
-        Number of groups to exclude from the end of each training group
-        before the test group.
-
-
+        Number of groups to exclude from the end of each training group before
+        the test group.
 
     Examples
     --------
     >>> import numpy as np
     >>> from sklearn.model_selection import GroupTimeSeriesSplit
-    >>> groups = np.array(['a', 'a', 'a', 'a', 'a', 'a',\
-                           'b', 'b', 'b', 'b', 'b',\
-                           'c', 'c', 'c', 'c',\
-                           'd', 'd', 'd'])
+    >>> groups = np.array([
+    ...     'a', 'a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd']
+    ... )
     >>> gtss = GroupTimeSeriesSplit(n_splits=3)
     >>> for train_idx, test_idx in gtss.split(groups, groups=groups):
     ...     print("TRAIN:", train_idx, "TEST:", test_idx)
-    ...     print("TRAIN GROUP:", groups[train_idx],\
-                  "TEST GROUP:", groups[test_idx])
-    TRAIN: [0 1 2 3 4 5] TEST: [ 6  7  8  9 10]
-    TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a']\
-    TEST GROUP: ['b' 'b' 'b' 'b' 'b']
-    TRAIN: [ 0  1  2  3  4  5  6  7  8  9 10] TEST: [11 12 13 14]
-    TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b']\
-    TEST GROUP: ['c' 'c' 'c' 'c']
-    TRAIN: [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14]\
-    TEST: [15 16 17]
-    TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b' 'c' 'c' 'c' 'c']\
-    TEST GROUP: ['d' 'd' 'd']
+    ...     print(
+    ...         "TRAIN GROUP:", groups[train_idx], "TEST GROUP:", groups[test_idx]
+    ...     )
+    TRAIN: [0 1 2 3] TEST: [4 5 6]
+    TRAIN GROUP: ['a' 'a' 'a' 'a'] TEST GROUP: ['b' 'b' 'b']
+    TRAIN: [0 1 2 3 4 5 6] TEST: [ 7  8  9 10]
+    TRAIN GROUP: ['a' 'a' 'a' 'a' 'b' 'b' 'b'] TEST GROUP: ['c' 'c' 'c' 'c']
+    TRAIN: [ 0  1  2  3  4  5  6  7  8  9 10] TEST: [11 12 13]
+    TRAIN GROUP: ['a' 'a' 'a' 'a' 'b' 'b' 'b' 'c' 'c' 'c' 'c'] TEST GROUP: ['d' 'd' 'd']
     """
 
     @_deprecate_positional_args
