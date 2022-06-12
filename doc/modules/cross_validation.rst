@@ -896,7 +896,7 @@ Group Time Series Split
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 :class:`GroupTimeSeriesSplit` combines :class:`TimeSeriesSplit` with the Group
-awareness of `GroupKFold`. Like :class:`TimeSeriesSplit` this  also returns
+awareness of :class:`GroupKFold`. Like :class:`TimeSeriesSplit` this also returns
 first :math:`k` folds as train set and the :math:`(k+1)` th fold as test set.
 Successive training sets are supersets of those that come before them. Also, it
 adds all surplus data to the first training partition, which is always used to
