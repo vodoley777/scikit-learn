@@ -1902,7 +1902,7 @@ def test_group_time_series_ordering_and_group_preserved():
 
     X = y = np.ones(n_samples)
     # Fake array of time like
-    time_stamps = X * np.arange(n_samples)
+    time_stamps = np.arange(n_samples)
 
     gtf = GroupTimeSeriesSplit(n_splits=n_splits)
 
