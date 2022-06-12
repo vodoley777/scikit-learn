@@ -1957,28 +1957,7 @@ def test_group_time_series_max_train_size():
 
 
 def test_group_time_series_non_overlap_group():
-    groups = np.array(
-        [
-            "a",
-            "a",
-            "a",
-            "a",
-            "a",
-            "a",
-            "b",
-            "b",
-            "b",
-            "b",
-            "b",
-            "c",
-            "c",
-            "c",
-            "c",
-            "d",
-            "d",
-            "d",
-        ]
-    )
+    groups = np.array((["a"] * 6) + (["b"] * 5) + (["c"] * 4) + (["d"] * 3))
     gtss = GroupTimeSeriesSplit(n_splits=3)
     splits = gtss.split(groups, groups=groups)
     train, test = next(splits)
