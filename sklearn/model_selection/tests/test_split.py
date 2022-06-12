@@ -1989,28 +1989,7 @@ def test_group_time_series_non_overlap_group():
 
 
 def test_group_time_series_non_continuous():
-    groups = np.array(
-        [
-            "a",
-            "a",
-            "a",
-            "a",
-            "a",
-            "a",
-            "b",
-            "b",
-            "b",
-            "b",
-            "b",
-            "c",
-            "c",
-            "c",
-            "c",
-            "a",
-            "d",
-            "d",
-        ]
-    )
+    groups = np.array(["a", "a", "a", "a", "a", "b", "a", "b", "c", "c"])
     X = y = np.ones(len(groups))
     with pytest.raises(
         ValueError,
