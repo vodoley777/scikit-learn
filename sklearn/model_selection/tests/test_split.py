@@ -1988,7 +1988,7 @@ def test_group_time_series_non_overlap_group():
     assert_array_equal(groups[test], ["d", "d", "d"])
 
 
-def test_group_time_series_non_continuous():
+def test_group_time_series_non_contiguous():
     groups = np.array(["a", "a", "a", "a", "a", "b", "a", "b", "c", "c"])
     X = y = np.ones(len(groups))
     with pytest.raises(
