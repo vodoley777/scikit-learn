@@ -2532,7 +2532,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
         'a', 'a', 'b', 'b', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd'
     ])
 
-    Non-continuous groups like below will give an error.
+    Non-contiguous groups like below will give an error.
 
     invalid_groups = np.array([
         'a', 'a', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd'
