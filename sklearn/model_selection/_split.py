@@ -2642,7 +2642,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
         tss = TimeSeriesSplit(
             gap=self.gap,
             max_train_size=None,
-            n_splits=n_splits,
+            n_splits=self.n_splits,
             test_size=None,
         )
 
