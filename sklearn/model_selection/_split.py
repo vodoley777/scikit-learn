@@ -2526,7 +2526,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
     Note that unlike standard cross-validation methods, successive training
     sets are supersets of those that come before them.
 
-    The group labels should be continuous such as the following:
+    The group labels should be contiguous such as the following:
 
     valid_groups = np.array([
         'a', 'a', 'b', 'b', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd'
