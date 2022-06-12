@@ -1910,7 +1910,7 @@ def test_group_time_series_ordering_and_group_preserved():
     # 1. Elements of a group in the evaluation split should not be
     # in the training split
     # 2. Elements of the training split should be in the past
-    splits = gtf.split(X, y, groups)
+    splits = gtf.split(X, y=y, groups=groups)
 
     # Get all the other entries for the groups found in test
     for train, test in splits:
