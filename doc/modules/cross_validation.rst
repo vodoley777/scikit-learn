@@ -912,7 +912,7 @@ The groups should be contiguous like below::
 
 Non-contiguous groups like below will give an error::
 
-    ['a', 'a', 'a', 'a', 'a', 'b','b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd']
+    ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd']
 
 `GroupTimeSeriesSplit` is useful in cases where we have timeseries data for say
 multiple days with multiple data points within a day. During cross-validation
