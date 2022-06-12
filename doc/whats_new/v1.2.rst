@@ -128,7 +128,7 @@ Changelog
 :mod:`sklearn.model_selection`
 ..............................
   
-- |MajorFeature| :class:`model_selection.GroupTimeSeriesSplit` is a Time Series
+- |MajorFeature| :class:`model_selection.GroupTimeSeriesSplit` is a time series
   cross-validator variant with non-overlapping groups.
   :pr:`16236` by :user:`Gaurav Chawla <getgaurav2>`.
 
