@@ -914,7 +914,7 @@ Non-contiguous groups like below will give an error::
 
     ['a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd']
 
-`GroupTimeSeriesSplit` is useful in cases where we have timeseries data for say
+:class:`GroupTimeSeriesSplit` is useful in cases where we have time series data for say
 multiple days with multiple data points within a day. During cross-validation
 we may not want the training days to be be used in testing. Here the days can
 act as groups to keep the training and test splits separate.
