@@ -2626,7 +2626,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
                     raise ValueError(
                         (
                             "The groups should be continuous."
-                            " Found a non-countinuous group at"
+                            " Found a non-contiguous group at"
                             " index={0}"
                         ).format(idx)
                     )
