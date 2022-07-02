@@ -2523,7 +2523,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
     The same group will not appear in two different folds (the number of
     distinct groups has to be at least equal to the number of folds).
 
-    Note that unlike standard cross-validation methods, successive training
+    Note that, unlike standard cross-validation methods, successive training
     sets are supersets of those that come before them.
 
     The group labels should be contiguous such as the following:
