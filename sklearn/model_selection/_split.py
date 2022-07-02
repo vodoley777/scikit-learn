@@ -2608,7 +2608,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
             The testing set indices for that split.
         """
         if groups is None:
-            raise ValueError("The 'groups' parameter should not be None")
+            raise ValueError("The 'groups' parameter should not be None.")
         X, y, groups = indexable(X, y, groups)
         n_samples = _num_samples(X)
         n_splits = self.n_splits
