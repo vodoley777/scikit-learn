@@ -2589,8 +2589,8 @@ class GroupTimeSeriesSplit(_BaseKFold):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data, where n_samples is the number of samples
-            and n_features is the number of features.
+            Training data, where `n_samples` is the number of samples
+            and `n_features` is the number of features.
 
         y : array-like of shape (n_samples,)
             Always ignored, exists for compatibility.
