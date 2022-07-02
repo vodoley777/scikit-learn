@@ -2616,7 +2616,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
         reordered_unique_groups, indices = np.unique(groups, return_index=True)
         unique_groups = reordered_unique_groups[np.argsort(indices)]
         n_samples = _num_samples(X)
-        n_groups = _num_samples(unique_groups)
+        n_groups = len(unique_groups)
         for idx in np.arange(n_samples):
             if groups[idx] in group_dict:
                 if idx - group_dict[groups[idx]][-1] == 1:
