@@ -2610,10 +2610,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
         if groups is None:
             raise ValueError("The 'groups' parameter should not be None.")
         X, y, groups = indexable(X, y, groups)
-        n_samples = _num_samples(X)
-        n_splits = self.n_splits
-        n_folds = n_splits + 1
-        group_dict = {}
+        n_samples, n_folds, group_dict = _num_samples(X), self.n_splits + 1, {}
         u, ind = np.unique(groups, return_index=True)
         unique_groups = u[np.argsort(ind)]
         n_samples = _num_samples(X)
