@@ -2611,8 +2611,10 @@ class GroupTimeSeriesSplit(_BaseKFold):
             raise ValueError("The 'groups' parameter should not be None.")
         X, y, groups = indexable(X, y, groups)
         n_samples, n_folds, group_dict = _num_samples(X), self.n_splits + 1, {}
-        u, ind = np.unique(groups, return_index=True)
-        unique_groups = u[np.argsort(ind)]
+        # `np.unique` will reordered the group. We need to keep the original
+        # ordering.
+        reordered_unique_groups, indices = np.unique(groups, return_index=True)
+        unique_groups = reordered_unique_groups[np.argsort(indices)]
         n_samples = _num_samples(X)
         n_groups = _num_samples(unique_groups)
         for idx in np.arange(n_samples):
