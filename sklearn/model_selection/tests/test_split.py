@@ -1993,7 +1993,7 @@ def test_group_time_series_non_contiguous():
     with pytest.raises(
         ValueError,
         match=(
-            "The groups should be continuous. Found a non-countinuous group at index=15"
+            "The groups should be contiguous. Found a non-contiguous group at index=6"
         ),
     ):
         next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
