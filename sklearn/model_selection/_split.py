@@ -2625,19 +2625,19 @@ class GroupTimeSeriesSplit(_BaseKFold):
                 else:
                     raise ValueError(
                         (
-                            "The groups should be continuous."
+                            f"The groups should be continuous."
                             " Found a non-contiguous group at"
-                            " index={0}"
-                        ).format(idx)
+                            " index={idx}"
+                        )
                     )
             else:
                 group_dict[groups[idx]] = [idx]
             if n_folds > n_groups:
                 raise ValueError(
                     (
-                        "Cannot have number of folds={0} greater than"
-                        " the number of groups={1}"
-                    ).format(n_folds, n_groups)
+                        f"Cannot have number of folds={n_folds} "
+                        "greater than the number of groups={n_groups}"
+                    )
                 )
         tss = TimeSeriesSplit(
             gap=self.gap,
