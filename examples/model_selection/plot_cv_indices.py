@@ -209,9 +209,9 @@ for cv in cvs:
     this_cv = cv(n_splits=n_splits)
     fig, ax = plt.subplots(figsize=(6, 3))
     if cv == GroupTimeSeriesSplit:
-        groups = unevengroups
-    plot_cv_indices(this_cv, X, y, groups, ax, n_splits)
-
+        plot_cv_indices(this_cv, X, y, group=unevengroups, ax, n_splits)
+    else:
+        plot_cv_indices(this_cv, X, y, group=groups, ax, n_splits)
     ax.legend(
         [Patch(color=cmap_cv(0.8)), Patch(color=cmap_cv(0.02))],
         ["Testing set", "Training set"],

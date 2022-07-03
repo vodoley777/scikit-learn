@@ -2624,9 +2624,9 @@ class GroupTimeSeriesSplit(_BaseKFold):
                 else:
                     raise ValueError(
                         (
-                            f"The groups should be continuous."
+                            "The groups should be continuous."
                             " Found a non-contiguous group at"
-                            " index={idx}"
+                            f" index={idx}"
                         )
                     )
             else:
@@ -2635,7 +2635,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
                 raise ValueError(
                     (
                         f"Cannot have number of folds={n_folds} "
-                        "greater than the number of groups={n_groups}"
+                        f"greater than the number of groups={n_groups}"
                     )
                 )
         tss = TimeSeriesSplit(
