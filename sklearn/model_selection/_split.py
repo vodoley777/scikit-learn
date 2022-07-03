@@ -2517,13 +2517,13 @@ class GroupTimeSeriesSplit(_BaseKFold):
     in cross validator is inappropriate.
 
     This cross-validation object is a variation of :class:`KFold`. In the kth
-    split, it returns first k folds as train set and the (k+1)th fold as test
+    split, it returns the first k folds as train set and the (k+1)th fold as test
     set.
 
     The same group will not appear in two different folds (the number of
     distinct groups has to be at least equal to the number of folds).
 
-    Note that unlike standard cross-validation methods, successive training
+    Note that, unlike standard cross-validation methods, successive training
     sets are supersets of those that come before them.
 
     The group labels should be contiguous such as the following:
@@ -2589,8 +2589,8 @@ class GroupTimeSeriesSplit(_BaseKFold):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data, where n_samples is the number of samples
-            and n_features is the number of features.
+            Training data, where `n_samples` is the number of samples
+            and `n_features` is the number of features.
 
         y : array-like of shape (n_samples,)
             Always ignored, exists for compatibility.
@@ -2608,16 +2608,15 @@ class GroupTimeSeriesSplit(_BaseKFold):
             The testing set indices for that split.
         """
         if groups is None:
-            raise ValueError("The 'groups' parameter should not be None")
+            raise ValueError("The 'groups' parameter should not be None.")
         X, y, groups = indexable(X, y, groups)
+        n_samples, n_folds, group_dict = _num_samples(X), self.n_splits + 1, {}
+        # `np.unique` will reordered the group. We need to keep the original
+        # ordering.
+        reordered_unique_groups, indices = np.unique(groups, return_index=True)
+        unique_groups = reordered_unique_groups[np.argsort(indices)]
         n_samples = _num_samples(X)
-        n_splits = self.n_splits
-        n_folds = n_splits + 1
-        group_dict = {}
-        u, ind = np.unique(groups, return_index=True)
-        unique_groups = u[np.argsort(ind)]
-        n_samples = _num_samples(X)
-        n_groups = _num_samples(unique_groups)
+        n_groups = len(unique_groups)
         for idx in np.arange(n_samples):
             if groups[idx] in group_dict:
                 if idx - group_dict[groups[idx]][-1] == 1:

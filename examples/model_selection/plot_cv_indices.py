@@ -60,7 +60,7 @@ group_prior = rng.dirichlet([2] * 10)
 groups = np.repeat(np.arange(10), rng.multinomial(100, group_prior))
 
 # Un-Evenly spaced groups repeated once
-unevengroups = np.hstack([[ii] * 10 if ii % 3 else [ii] * 5 for ii in range(12)])
+unevengroups = np.hstack([[group] * 10 if group % 3 else [group] * 5 for group in range(12)])
 
 
 def visualize_groups(classes, groups, name):

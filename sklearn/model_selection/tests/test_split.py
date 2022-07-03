@@ -1918,8 +1918,7 @@ def test_group_time_series_ordering_and_group_preserved():
         assert len(np.intersect1d(groups[train], groups[test])) == 0
         # All the elements in the train set should be in past of the
         # elements of the test set
-        for e in time_stamps[train]:
-            assert (e < time_stamps[test]).all()
+        assert (time_stamps[train].max() < time_stamps[test]).all()
 
 
 def test_group_time_series_more_folds_than_group():
@@ -1994,7 +1993,7 @@ def test_group_time_series_non_contiguous():
     with pytest.raises(
         ValueError,
         match=(
-            "The groups should be continuous. Found a non-countinuous group at index=15"
+            "The groups should be contiguous. Found a non-contiguous group at index=6"
         ),
     ):
         next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
