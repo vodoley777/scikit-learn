@@ -60,7 +60,9 @@ group_prior = rng.dirichlet([2] * 10)
 groups = np.repeat(np.arange(10), rng.multinomial(100, group_prior))
 
 # Un-Evenly spaced groups repeated once
-unevengroups = np.hstack([[group] * 10 if group % 3 else [group] * 5 for group in range(12)])
+unevengroups = np.hstack(
+    [[group] * 10 if group % 3 else [group] * 5 for group in range(12)]
+)
 
 
 def visualize_groups(classes, groups, name):
@@ -209,9 +211,10 @@ for cv in cvs:
     this_cv = cv(n_splits=n_splits)
     fig, ax = plt.subplots(figsize=(6, 3))
     if cv == GroupTimeSeriesSplit:
-        plot_cv_indices(this_cv, X, y, group=unevengroups, ax, n_splits)
+        plot_cv_indices(this_cv, X, y, unevengroups, ax, n_splits)
     else:
-        plot_cv_indices(this_cv, X, y, group=groups, ax, n_splits)
+        plot_cv_indices(this_cv, X, y, groups, ax, n_splits)
+
     ax.legend(
         [Patch(color=cmap_cv(0.8)), Patch(color=cmap_cv(0.02))],
         ["Testing set", "Training set"],
