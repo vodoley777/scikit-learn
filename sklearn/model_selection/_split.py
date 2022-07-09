@@ -2623,7 +2623,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
                     group_dict[groups[idx]].append(idx)
                 else:
                     raise ValueError(
-                        "The groups should be continuous."
+                        "The groups should be contiguous."
                         " Found a non-contiguous group at"
                         f" index={idx}"
                     )
