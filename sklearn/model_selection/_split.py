@@ -2528,15 +2528,19 @@ class GroupTimeSeriesSplit(_BaseKFold):
 
     The group labels should be contiguous such as the following:
 
-    valid_groups = np.array([
-        'a', 'a', 'b', 'b', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd'
-    ])
+    .. code-block::
+
+        valid_groups = np.array([
+            'a', 'a', 'b', 'b', 'b', 'b', 'b', 'c', 'c', 'c', 'c', 'd', 'd', 'd'
+        ])
 
     Non-contiguous groups like below will give an error.
 
-    invalid_groups = np.array([
-        'a', 'a', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd'
-    ])
+    .. code-block::
+
+        invalid_groups = np.array([
+            'a', 'a', 'b', 'b', 'b', 'b', 'b', 'a', 'c', 'c', 'c', 'b', 'd', 'd'
+        ])
 
     Read more in the :ref:`User Guide <cross_validation>`.
 
