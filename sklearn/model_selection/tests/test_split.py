@@ -1955,7 +1955,7 @@ def test_group_time_series_max_train_size():
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
 
-def test_group_time_series_non_overlap_group():
+def test_group_time_series_non_overlap_group_1():
     groups = np.array((["a"] * 6) + (["b"] * 5) + (["c"] * 4) + (["d"] * 3))
     gtss = GroupTimeSeriesSplit(n_splits=3)
     splits = gtss.split(groups, groups=groups)
@@ -1985,6 +1985,203 @@ def test_group_time_series_non_overlap_group():
         ),
     )
     assert_array_equal(groups[test], ["d", "d", "d"])
+
+
+def test_group_time_series_non_overlap_group_2():
+    groups = np.array(
+        (["a"] * 3)
+        + (["b"] * 2)
+        + (["c"] * 3)
+        + (["d"] * 2)
+        + (["e"] * 3)
+        + (["f"] * 2)
+        + (["g"] * 3)
+        + (["h"] * 2)
+        + (["i"] * 3)
+        + (["j"] * 2)
+        + (["k"] * 3)
+    )
+    gtss = GroupTimeSeriesSplit(n_splits=3)
+    splits = gtss.split(groups, groups=groups)
+    train, test = next(splits)
+    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]))
+    assert_array_equal(test, np.array([13, 14, 15, 16, 17]))
+    assert_array_equal(
+        groups[train],
+        np.array(["a", "a", "a", "b", "b", "c", "c", "c", "d", "d", "e", "e", "e"]),
+    )
+    assert_array_equal(groups[test], np.array(["f", "f", "g", "g", "g"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+    )
+    assert_array_equal(test, np.array([18, 19, 20, 21, 22]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["h", "h", "i", "i", "i"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+            ]
+        ),
+    )
+    assert_array_equal(test, np.array([23, 24, 25, 26, 27]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "h",
+                "h",
+                "i",
+                "i",
+                "i",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
+
+
+def test_group_time_series_non_overlap_group_3():
+    groups = np.array(
+        (["a"] * 3)
+        + (["b"] * 2)
+        + (["c"] * 3)
+        + (["d"] * 2)
+        + (["e"] * 3)
+        + (["f"] * 2)
+        + (["g"] * 3)
+        + (["h"] * 2)
+        + (["i"] * 3)
+        + (["j"] * 2)
+        + (["k"] * 3)
+    )
+    gtss = GroupTimeSeriesSplit(n_splits=3, gap=1)
+    splits = gtss.split(groups, groups=groups)
+    train, test = next(splits)
+    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
+    assert_array_equal(test, np.array([13, 14, 15, 16, 17]))
+    assert_array_equal(
+        groups[train], np.array(["a", "a", "a", "b", "b", "c", "c", "c", "d", "d"])
+    )
+    assert_array_equal(groups[test], np.array(["f", "f", "g", "g", "g"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+    )
+    assert_array_equal(test, np.array([18, 19, 20, 21, 22]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            ["a", "a", "a", "b", "b", "c", "c", "c", "d", "d", "e", "e", "e", "f", "f"]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["h", "h", "i", "i", "i"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        ),
+    )
+    assert_array_equal(test, np.array([23, 24, 25, 26, 27]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "h",
+                "h",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
 
 
 def test_group_time_series_non_contiguous():
