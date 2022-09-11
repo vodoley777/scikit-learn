@@ -356,7 +356,6 @@ class RFE(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
     def score(self, X, y, **fit_params):
         """Reduce X to the selected features and return the score of the estimator.
 
-
         Parameters
         ----------
         X : array of shape [n_samples, n_features]
