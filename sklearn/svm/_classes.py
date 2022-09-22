@@ -1523,9 +1523,12 @@ class NuSVR(RegressorMixin, BaseLibSVM):
 
 
 class OneClassSVM(OutlierMixin, BaseLibSVM):
-    """Unsupervised Outlier Detection.
+    """One-Class SVM for Unsupervised Outlier Detection.
 
-    Estimate the support of a high-dimensional distribution.
+    Estimate the support of a high-dimensional distribution by finding the
+    maximum margin soft boundary hyperplane separating a data set from the
+    origin. At most a fraction ``nu`` (``0 < nu <= 1``) of the data
+    are permitted to be outliers.
 
     The implementation is based on libsvm.
 
@@ -1650,6 +1653,9 @@ class OneClassSVM(OutlierMixin, BaseLibSVM):
     sklearn.neighbors.LocalOutlierFactor : Unsupervised Outlier Detection using
         Local Outlier Factor (LOF).
     sklearn.ensemble.IsolationForest : Isolation Forest Algorithm.
+    sklearn.svm.SVDD : Support vector method for outlier detection via
+        a separating soft-margin hypesphere implemented with libsvm with
+        a parameter to control the number of support vectors.
 
     Examples
     --------
@@ -1773,6 +1779,271 @@ class OneClassSVM(OutlierMixin, BaseLibSVM):
         """
         dec = self._decision_function(X).ravel()
         return dec
+
+    def score_samples(self, X):
+        """Raw scoring function of the samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The data matrix.
+
+        Returns
+        -------
+        score_samples : ndarray of shape (n_samples,)
+            Returns the (unshifted) scoring function of the samples.
+        """
+        return self.decision_function(X) + self.offset_
+
+    def predict(self, X):
+        """Perform classification on samples in X.
+
+        For a one-class model, +1 or -1 is returned.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features) or \
+                (n_samples_test, n_samples_train)
+            For kernel="precomputed", the expected shape of X is
+            (n_samples_test, n_samples_train).
+
+        Returns
+        -------
+        y_pred : ndarray of shape (n_samples,)
+            Class labels for samples in X.
+        """
+        y = super().predict(X)
+        return np.asarray(y, dtype=np.intp)
+
+    def _more_tags(self):
+        return {
+            "_xfail_checks": {
+                "check_sample_weights_invariance": (
+                    "zero sample_weight is not equivalent to removing samples"
+                ),
+            }
+        }
+
+
+class SVDD(OutlierMixin, BaseLibSVM):
+    """Support Vector Data Description for Unsupervised Outlier Detection.
+
+    Estimate the support of a high-dimensional distribution by finding the
+    tightest soft boundary hypersphere around a data set, which permits at
+    most a fraction ``nu`` (``0 < nu <= 1``) of the data as outliers.
+
+    The implementation is based on libsvm.
+
+    Read more in the :ref:`User Guide <outlier_detection>`.
+
+    ..versionadded: 1.2
+
+    Parameters
+    ----------
+    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'} or callable,  \
+        default='rbf'
+         Specifies the kernel type to be used in the algorithm.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
+
+    degree : int, default=3
+        Degree of the polynomial kernel function ('poly').
+        Must be non-negative. Ignored by all other kernels.
+
+    gamma : {'scale', 'auto'} or float, default='scale'
+        Kernel coefficient for 'rbf', 'poly' and 'sigmoid'.
+
+        - if ``gamma='scale'`` (default) is passed then it uses
+          1 / (n_features * X.var()) as value of gamma,
+        - if 'auto', uses 1 / n_features.
+        - if float, must be non-negative.
+
+    coef0 : float, default=0.0
+        Independent term in kernel function.
+        It is only significant in 'poly' and 'sigmoid'.
+
+    tol : float, default=1e-3
+        Tolerance for stopping criterion.
+
+    nu : float, default=0.5
+        An upper bound on the fraction of training
+        errors and a lower bound of the fraction of support
+        vectors. Should be in the interval (0, 1]. By default 0.5
+        will be taken.
+
+    shrinking : bool, default=True
+        Whether to use the shrinking heuristic.
+        See the :ref:`User Guide <shrinking_svm>`.
+
+    cache_size : float, default=200
+        Specify the size of the kernel cache (in MB).
+
+    verbose : bool, default=False
+        Enable verbose output. Note that this setting takes advantage of a
+        per-process runtime setting in libsvm that, if enabled, may not work
+        properly in a multithreaded context.
+
+    max_iter : int, default=-1
+        Hard limit on iterations within solver, or -1 for no limit.
+
+    Attributes
+    ----------
+    coef_ : ndarray of shape (1, n_features)
+        Weights assigned to the features (coefficients in the primal
+        problem). This is only available in the case of a linear kernel.
+
+        `coef_` is readonly property derived from `dual_coef_` and
+        `support_vectors_`.
+
+    dual_coef_ : ndarray of shape (1, n_SV)
+        Coefficients of the support vectors in the decision function.
+
+    fit_status_ : int
+        0 if correctly fitted, 1 otherwise (will raise warning)
+
+    intercept_ : ndarray of shape (1,)
+        The constant in the decision function.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : ndarray of shape (`n_features_in_`,)
+        Names of features seen during :term:`fit`. Defined only when `X`
+        has feature names that are all strings.
+
+    n_iter_ : int
+        Number of iterations run by the optimization routine to fit the model.
+
+    n_support_ : ndarray of shape (n_classes,), dtype=int32
+        Number of support vectors for each class.
+
+    offset_ : float
+        Offset used to define the decision function from the raw scores.
+        We have the relation: decision_function = score_samples - `offset_`.
+        The offset is the opposite of `intercept_` and is provided for
+        consistency with other outlier detection algorithms.
+
+    shape_fit_ : tuple of int of shape (n_dimensions_of_X,)
+        Array dimensions of training vector ``X``.
+
+    support_ : ndarray of shape (n_SV,)
+        Indices of support vectors.
+
+    support_vectors_ : ndarray of shape (n_SV, n_features)
+        Support vectors.
+
+    See Also
+    --------
+    sklearn.svm.OneClassSVM : Support vector method for outlier detection via
+        a separating soft-margin hyperplane implemented with libsvm with
+        a parameter to control the number of support vectors.
+
+    References
+    ----------
+    .. [1] Tax, D.M. and Duin, R.P., 2004. "Support vector data
+           description." Machine learning, 54(1), pp.45-66.
+           doi:10.1023/B:MACH.0000008084.60811.49
+
+    .. [2] Chang, W.C., Lee, C.P. and Lin, C.J., 2013. "A revisit
+           to support vector data description (SVDD)." Technical
+           Report, Department of Computer Science, National Taiwan
+           University.
+
+    Examples
+    --------
+    >>> from sklearn.svm import SVDD
+    >>> X = [[0], [0.44], [0.45], [0.46], [1]]
+    >>> clf = SVDD(gamma='auto').fit(X)
+    >>> clf.predict(X)
+    array([-1,  1,  1,  1, -1])
+    >>> clf.score_samples(X)
+    array([0.5298..., 0.8047..., 0.8056..., 0.8061..., 0.4832...])
+    """
+
+    _impl = "svdd_l1"
+
+    _parameter_constraints = {**BaseLibSVM._parameter_constraints}  # type: ignore
+    for unused_param in ["C", "class_weight", "epsilon", "probability", "random_state"]:
+        _parameter_constraints.pop(unused_param)
+
+    def __init__(
+        self,
+        *,
+        kernel="rbf",
+        degree=3,
+        gamma="scale",
+        coef0=0.0,
+        tol=1e-3,
+        nu=0.5,
+        shrinking=True,
+        cache_size=200,
+        verbose=False,
+        max_iter=-1,
+    ):
+
+        super().__init__(
+            kernel,
+            degree,
+            gamma,
+            coef0,
+            tol,
+            0.0,
+            nu,
+            0.0,
+            shrinking,
+            False,
+            cache_size,
+            None,
+            verbose,
+            max_iter,
+            random_state=None,
+        )
+
+    def fit(self, X, y=None, sample_weight=None):
+        """Learn a soft minimum-volume hypersphere around the sample X.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Set of samples, where `n_samples` is the number of samples and
+            `n_features` is the number of features.
+
+        y : Ignored
+            Not used, present for API consistency by convention.
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            Per-sample weights. Rescale C per sample. Higher weights
+            force the classifier to put more emphasis on these points.
+
+        Returns
+        -------
+        self : object
+            Fitted estimator.
+
+        Notes
+        -----
+        If X is not a C-ordered contiguous array it is copied.
+        """
+        super().fit(X, np.ones(_num_samples(X)), sample_weight=sample_weight)
+        self.offset_ = -self._intercept_
+        return self
+
+    def decision_function(self, X):
+        """Signed distance to the enveloping hypersphere.
+
+        Signed distance is positive for an inlier and negative for an outlier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            The data matrix.
+
+        Returns
+        -------
+        dec : ndarray of shape (n_samples,)
+            Returns the decision function of the samples.
+        """
+        return self._decision_function(X).ravel()
 
     def score_samples(self, X):
         """Raw scoring function of the samples.

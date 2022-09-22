@@ -73,9 +73,9 @@ def fit(
     Y : array, dtype=float64 of shape (n_samples,)
         target vector
 
-    svm_type : {0, 1, 2, 3, 4}, default=0
-        Type of SVM: C_SVC, NuSVC, OneClassSVM, EpsilonSVR or NuSVR
-        respectively.
+    svm_type : {0, 1, 2, 3, 4, 5}, optional
+        Type of SVM: C_SVC, NuSVC, OneClassSVM, EpsilonSVR, NuSVR, or
+        SVDD-L1 respectively. 0 by default.
 
     kernel : {'linear', 'rbf', 'poly', 'sigmoid', 'precomputed'}, default="rbf"
         Kernel to use in the model: linear, polynomial, RBF, sigmoid
@@ -610,9 +610,9 @@ def cross_validation(
     n_fold : int32
         Number of folds for cross validation.
 
-    svm_type : {0, 1, 2, 3, 4}, default=0
-        Type of SVM: C_SVC, NuSVC, OneClassSVM, EpsilonSVR or NuSVR
-        respectively.
+    svm_type : {0, 1, 2, 3, 4, 5}
+        Type of SVM: C SVC, nu SVC, one class, epsilon SVR, nu SVR,
+        or SVDD-L1.
 
     kernel : {'linear', 'rbf', 'poly', 'sigmoid', 'precomputed'}, default='rbf'
         Kernel to use in the model: linear, polynomial, RBF, sigmoid
