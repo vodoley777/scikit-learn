@@ -929,7 +929,7 @@ multiple days with multiple data points within a day. During cross-validation
 we may not want the training days to be be used in testing. Here the days can
 act as groups to keep the training and test splits separate.
 
-Example of 3-split time series cross-validation on a dataset with 18 samples
+Example of 3-split time series cross-validation on a dataset with 14 samples
 and 4 groups::
 
     >>> import numpy as np
