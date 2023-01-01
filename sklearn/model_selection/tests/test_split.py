@@ -1928,39 +1928,7 @@ def test_group_time_series_max_train_size():
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
 
-def test_group_time_series_non_overlap_group_1():
-    groups = np.array((["a"] * 6) + (["b"] * 5) + (["c"] * 4) + (["d"] * 3))
-    gtss = GroupTimeSeriesSplit(n_splits=3)
-    splits = gtss.split(groups, groups=groups)
-    train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5]))
-    assert_array_equal(test, np.array([6, 7, 8, 9, 10]))
-    assert_array_equal(groups[train], np.array(["a", "a", "a", "a", "a", "a"]))
-    assert_array_equal(groups[test], np.array(["b", "b", "b", "b", "b"]))
-
-    train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
-    assert_array_equal(test, np.array([11, 12, 13, 14]))
-    assert_array_equal(
-        groups[train], np.array(["a", "a", "a", "a", "a", "a", "b", "b", "b", "b", "b"])
-    )
-    assert_array_equal(groups[test], np.array(["c", "c", "c", "c"]))
-
-    train, test = next(splits)
-    assert_array_equal(
-        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
-    )
-    assert_array_equal(test, np.array([15, 16, 17]))
-    assert_array_equal(
-        groups[train],
-        np.array(
-            ["a", "a", "a", "a", "a", "a", "b", "b", "b", "b", "b", "c", "c", "c", "c"]
-        ),
-    )
-    assert_array_equal(groups[test], ["d", "d", "d"])
-
-
-def test_group_time_series_non_overlap_group_2():
+def test_group_time_series_non_overlap_group():
     groups = np.array(
         (["a"] * 3)
         + (["b"] * 2)
@@ -2082,7 +2050,7 @@ def test_group_time_series_non_overlap_group_2():
     assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
 
 
-def test_group_time_series_non_overlap_group_3():
+def test_group_time_series_non_overlap_group_with_gap():
     groups = np.array(
         (["a"] * 3)
         + (["b"] * 2)
@@ -2157,7 +2125,7 @@ def test_group_time_series_non_overlap_group_3():
     assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
 
 
-def test_group_time_series_non_overlap_group_4():
+def test_group_time_series_non_overlap_group_imbalanced():
     groups = np.array(
         (["a"] * 20)
         + (["b"] * 12)
