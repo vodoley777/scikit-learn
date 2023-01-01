@@ -2695,10 +2695,6 @@ class GroupTimeSeriesSplit(_BaseKFold):
     In each split, test indices must be higher than before, and thus shuffling
     in cross validator is inappropriate.
 
-    This cross-validation object is a variation of :class:`KFold`. In the kth
-    split, it returns the first k folds as train set and the (k+1)th fold as test
-    set.
-
     The same group will not appear in two different folds (the number of
     distinct groups has to be at least equal to the number of folds).
 
@@ -2793,37 +2789,34 @@ class GroupTimeSeriesSplit(_BaseKFold):
         if groups is None:
             raise ValueError("The 'groups' parameter should not be None.")
         X, y, groups = indexable(X, y, groups)
-        n_samples, n_folds, group_dict = _num_samples(X), self.n_splits + 1, {}
+        n_folds = self.n_splits + 1
         # `np.unique` will reorder the group. We need to keep the original
         # ordering.
         reordered_unique_groups, indices = np.unique(groups, return_index=True)
         unique_groups = reordered_unique_groups[np.argsort(indices)]
-        n_samples = _num_samples(X)
         n_groups = len(unique_groups)
-        for idx in np.arange(n_samples):
-            if groups[idx] in group_dict:
-                if idx - group_dict[groups[idx]][-1] == 1:
-                    group_dict[groups[idx]].append(idx)
-                else:
-                    raise ValueError(
-                        "The groups should be contiguous."
-                        " Found a non-contiguous group at"
-                        f" index={idx}"
-                    )
-            else:
-                group_dict[groups[idx]] = [idx]
-            if n_folds > n_groups:
+        if n_folds > n_groups:
+            raise ValueError(
+                f"Cannot have number of folds={n_folds} "
+                f"greater than the number of groups={n_groups}"
+            )
+        seen_groups = set()
+        prev_group = None
+        for idx, group in enumerate(groups):
+            if group != prev_group and group in seen_groups:
                 raise ValueError(
-                    f"Cannot have number of folds={n_folds} "
-                    f"greater than the number of groups={n_groups}"
+                    "The groups should be contiguous."
+                    " Found a non-contiguous group at"
+                    f" index={idx}"
                 )
+            prev_group = group
+            seen_groups.add(group)
         tss = TimeSeriesSplit(
             gap=self.gap,
             max_train_size=None,
             n_splits=self.n_splits,
             test_size=None,
         )
-
         for train_idx, test_idx in tss.split(unique_groups):
             train_array = np.where(np.isin(groups, unique_groups[train_idx]))[0]
             test_array = np.where(np.isin(groups, unique_groups[test_idx]))[0]
