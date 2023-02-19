@@ -19,18 +19,20 @@ from numpy.testing import (
     assert_allclose,
 )
 
-from sklearn.datasets import load_digits, load_iris
+from sklearn import clone
+from sklearn.datasets import load_digits, load_iris, make_blobs
 from sklearn.datasets import make_regression, make_multilabel_classification
 from sklearn.exceptions import ConvergenceWarning
 from io import StringIO
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing import MinMaxScaler, scale
 from scipy.sparse import csr_matrix
-from sklearn.utils._testing import ignore_warnings
 
+from sklearn.utils._testing import ignore_warnings, set_random_state
 
 ACTIVATION_TYPES = ["identity", "logistic", "tanh", "relu"]
 
@@ -926,3 +928,93 @@ def test_mlp_warm_start_with_early_stopping(MLPEstimator):
     mlp.set_params(max_iter=20)
     mlp.fit(X_iris, y_iris)
     assert len(mlp.validation_scores_) > n_validation_scores
+
+
+@pytest.mark.parametrize("weighted_class", [i for i in range(3)])
+def test_mlp_classifier_with_sample_and_class_weights(weighted_class):
+    """test sample and class weights:
+    check that at least threshold % of samples (from chosen class)
+    have higher score vs. training without sample or class weights
+
+    test uses the digits dataset, and chooses parametrically class
+    to apply weights for (classes set to digits 0,1 and 2 though
+    all classes 0-9 should pass this test with threshold=0.15)
+    """
+
+    weighted_class = weighted_class
+    standard_weight = 1.0
+    high_weight = 5.0
+    threshold = 0.15
+    split_size = 0.5
+
+    # data preprocess
+    X, y = load_digits(return_X_y=True)
+    X = X / X.max()
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, train_size=split_size, random_state=0
+    )
+
+    class_weight = [{0: standard_weight} for _ in range(np.max(y) + 1)]
+    class_weight[weighted_class] = {0: high_weight}
+
+    sample_weight = np.ones((y_train.shape[0])) * standard_weight
+    sample_weight[y_train == weighted_class] = high_weight
+
+    test_samples = X_test[y_test == weighted_class]
+
+    base_clf = MLPClassifier(random_state=0)
+    base_clf.fit(X_train, y_train)
+    score = base_clf.predict_proba(test_samples)[:, weighted_class]
+
+    # test class weights
+    clf = MLPClassifier(random_state=1)
+    clf.fit(X_train, y_train, class_weight=class_weight)
+    class_weighted_score = clf.predict_proba(test_samples)[:, weighted_class]
+
+    samples_with_greater_score = (
+        class_weighted_score > score
+    ).sum() / class_weighted_score.shape[0]
+    assert samples_with_greater_score > threshold
+
+    # test sample weight
+    clf = MLPClassifier(random_state=1)
+    clf.fit(X_train, y_train, sample_weight=sample_weight)
+    sample_weighted_score = clf.predict_proba(test_samples)[:, weighted_class]
+
+    samples_with_greater_score = (
+        sample_weighted_score > score
+    ).sum() / sample_weighted_score.shape[0]
+    assert samples_with_greater_score > threshold
+
+    # Test that class_weight and sample_weight have the same effect
+    assert (class_weighted_score != sample_weighted_score).sum() == 0
+
+
+@pytest.mark.parametrize("n_centers", [2, 3])
+def check_class_weight_same_as_in_estimator_checks(n_centers):
+    """Conduct the same test as check_class_weight_classifiers in estimator_checks.py"""
+    classifier_orig = MLPClassifier()
+
+    # create a very noisy dataset
+    X, y = make_blobs(centers=n_centers, random_state=0, cluster_std=20)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.5, random_state=0
+    )
+
+    n_centers = len(np.unique(y_train))
+
+    if n_centers == 2:
+        class_weight = {0: 1000, 1: 0.0001}
+    else:
+        class_weight = {0: 1000, 1: 0.0001, 2: 0.0001}
+
+    classifier = clone(classifier_orig)
+    classifier.set_params(max_iter=1000)
+    classifier.set_params(n_iter_no_change=20)
+
+    set_random_state(classifier)
+    classifier.fit(X_train, y_train, class_weight=class_weight)
+    y_pred = classifier.predict(X_test)
+    # XXX: Generally can use 0.89 here. On Windows, LinearSVC gets
+    #      0.88 (Issue #9111)
+    assert np.mean(y_pred == 0) > 0.87
