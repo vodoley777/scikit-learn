@@ -2,23 +2,21 @@ import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
-
 from sklearn.compose import make_column_transformer
 from sklearn.datasets import load_iris
 
 from sklearn.datasets import load_breast_cancer
 from sklearn.exceptions import NotFittedError
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import roc_curve
 from sklearn.metrics import auc
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_validate, train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
 
-
-from sklearn.metrics import RocCurveDisplay
+from sklearn.metrics import RocCurveDisplay, MultiRocCurveDisplay
 
 
 @pytest.fixture(scope="module")
@@ -172,7 +170,10 @@ def test_roc_curve_display_default_labels(
     fpr = np.array([0, 0.5, 1])
     tpr = np.array([0, 0.5, 1])
     disp = RocCurveDisplay(
-        fpr=fpr, tpr=tpr, roc_auc=roc_auc, estimator_name=estimator_name
+        fpr=fpr,
+        tpr=tpr,
+        roc_auc=roc_auc,
+        estimator_name=estimator_name,
     ).plot()
     assert disp.line_.get_label() == expected_label
 
@@ -249,3 +250,276 @@ def test_plot_roc_curve_pos_label(pyplot, response_method, constructor_name):
 
     assert display.roc_auc == pytest.approx(roc_auc_limit)
     assert np.trapz(display.tpr, display.fpr) == pytest.approx(roc_auc_limit)
+
+
+@pytest.mark.parametrize(
+    "param",
+    [
+        {"return_estimator": False, "return_indices": True},
+        {"return_estimator": True, "return_indices": False},
+    ],
+)
+def test_from_cv_results_missing_dict_key(pyplot, data_binary, param):
+    """Check that we raise an error if `estimator` or `indices` are missing in
+    the dictionary returned by `cross_validate`."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+    cv_results = cross_validate(model, X, y, cv=3, **param)
+
+    err_msg = "cv_results does not contain one of the following required keys"
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(cv_results, X, y)
+
+
+def test_from_cv_results_inconsistent_n_samples(pyplot, data_binary):
+    """Check that we raise an error if the data given in `cross_validate` and
+    `from_cv_results` are inconsistent regarding the number of samples."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    err_msg = "X does not contain the correct number of samples"
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(cv_results, X[:-1], y[:-1])
+
+
+def test_from_cv_results_wrong_estimator_type(pyplot, data_binary):
+    """Check that we raise an error if the type of estimator in `cv_results` is not
+    a binary classifier."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LinearRegression())
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    err_msg = "Expected 'estimator' to be a binary classifier."
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(cv_results, X, y)
+
+
+def test_from_cv_results_wrong_length_fold_name(pyplot, data_binary):
+    """Check that we raise an error if the length of the fold name is not
+    consistent with the number of estimators in `cv_results`."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+
+    n_fold = 3
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    fold_name = [f"fold_{i}" for i in range(n_fold + 1)]
+    err_msg = "When `fold_name` is provided, it must have the same length as "
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(cv_results, X, y, fold_name=fold_name)
+
+    # this error could be also raised when invoking `plot` using the display
+    display = RocCurveDisplay.from_cv_results(cv_results, X, y, kind="folds")
+    with pytest.raises(ValueError, match=err_msg):
+        display.plot(fold_name=fold_name)
+
+
+def test_from_cv_results_wrong_kind(pyplot, data_binary):
+    """Check that we raise an error if `kind` is unknown."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    err_msg = "Parameter `kind` must be one of"
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(cv_results, X, y, kind="unknown")
+
+
+def test_from_cv_results_wrong_length_fold_line_kw(pyplot, data_binary):
+    """Check that we raise an error if the length of `fold_line_kw` is not
+    consistent with the number of estimators in `cv_results`."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+
+    n_fold = 3
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    fold_line_kw = [{}] * (n_fold + 1)
+    err_msg = "When `fold_line_kw` is a list, it must have the same length as "
+    with pytest.raises(ValueError, match=err_msg):
+        RocCurveDisplay.from_cv_results(
+            cv_results, X, y, kind="folds", fold_line_kw=fold_line_kw
+        )
+
+
+def test_from_cv_results_default(pyplot, data_binary):
+    """Check default behaviour of `RocCurveDisplay.from_cv_results`."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+    n_folds = 3
+    cv_results = cross_validate(
+        model, X, y, cv=n_folds, return_estimator=True, return_indices=True
+    )
+    display = RocCurveDisplay.from_cv_results(cv_results, X, y, kind="folds")
+    assert isinstance(display, MultiRocCurveDisplay)
+    assert all(isinstance(d, RocCurveDisplay) for d in display.displays)
+
+    legend = display.ax_.get_legend()
+    assert not legend.get_title().get_text()
+    assert len(legend.get_texts()) == n_folds
+    for i, text in enumerate(legend.get_texts()):
+        assert text.get_text().startswith(f"ROC fold #{i}")
+
+    display = RocCurveDisplay.from_cv_results(cv_results, X, y, kind="both")
+
+    legend = display.ax_.get_legend()
+    assert legend.get_title().get_text() == "Uncertainties via cross-validation"
+    assert len(legend.get_texts()) == n_folds + 2  # adding mean and std dev
+    for i in range(n_folds):
+        assert legend.get_texts()[i].get_text().startswith(f"ROC fold #{i}")
+    assert legend.get_texts()[n_folds].get_text().startswith("Mean ROC")
+    assert "1 std. dev." in legend.get_texts()[n_folds + 1].get_text()
+
+
+def test_from_cv_results_attributes(pyplot, data_binary):
+    """Check that `MultiRocCurveDisplay` contains the correct attributes with
+    the expected behaviour."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+    n_folds = 3
+
+    cv_results = cross_validate(
+        model, X, y, cv=n_folds, return_estimator=True, return_indices=True
+    )
+    display = RocCurveDisplay.from_cv_results(cv_results, X, y, kind="folds")
+
+    import matplotlib as mpl  # noqal
+
+    assert isinstance(display.ax_, mpl.axes.Axes)
+    assert isinstance(display.figure_, mpl.figure.Figure)
+
+    assert isinstance(display.fold_lines_, np.ndarray)
+    assert len(display.fold_lines_) == n_folds
+    assert all(isinstance(line, mpl.lines.Line2D) for line in display.fold_lines_)
+    assert display.mean_line_ is None
+    assert display.std_area_ is None
+    assert display.chance_level_ is None
+
+    display = RocCurveDisplay.from_cv_results(cv_results, X, y, kind="aggregate")
+
+    assert isinstance(display.ax_, mpl.axes.Axes)
+    assert isinstance(display.figure_, mpl.figure.Figure)
+
+    assert display.fold_lines_ is None
+    assert isinstance(display.mean_line_, mpl.lines.Line2D)
+    assert isinstance(display.std_area_, mpl.collections.PolyCollection)
+    assert display.chance_level_ is None
+
+    display = RocCurveDisplay.from_cv_results(
+        cv_results, X, y, kind="both", plot_chance_level=True
+    )
+
+    assert isinstance(display.ax_, mpl.axes.Axes)
+    assert isinstance(display.figure_, mpl.figure.Figure)
+
+    assert isinstance(display.fold_lines_, np.ndarray)
+    assert len(display.fold_lines_) == n_folds
+    assert all(isinstance(line, mpl.lines.Line2D) for line in display.fold_lines_)
+    assert isinstance(display.mean_line_, mpl.lines.Line2D)
+    assert isinstance(display.std_area_, mpl.collections.PolyCollection)
+    assert isinstance(display.chance_level_, mpl.lines.Line2D)
+
+
+def test_from_cv_results_names(pyplot, data_binary):
+    """Check that passing names for each ROC curves is behaving as expected."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+    n_folds = 3
+
+    cv_results = cross_validate(
+        model, X, y, cv=n_folds, return_estimator=True, return_indices=True
+    )
+    fold_name = [f"From CV #{i}" for i in range(n_folds)]
+    aggregate_name = "Mean from CV"
+    display = RocCurveDisplay.from_cv_results(
+        cv_results,
+        X,
+        y,
+        kind="both",
+        fold_name=fold_name,
+        aggregate_name=aggregate_name,
+    )
+
+    legend = display.ax_.get_legend()
+    for i in range(n_folds):
+        assert fold_name[i] in legend.get_texts()[i].get_text()
+    assert aggregate_name in legend.get_texts()[n_folds].get_text()
+
+    # passing name in `plot` should override the name passed in `from_cv_results`
+    fold_name = [f"From plot #{i}" for i in range(n_folds)]
+    aggregate_name = "Mean from plot"
+    display.plot(kind="both", fold_name=fold_name, aggregate_name=aggregate_name)
+
+    legend = display.ax_.get_legend()
+    for i in range(n_folds):
+        assert fold_name[i] in legend.get_texts()[i].get_text()
+    assert aggregate_name in legend.get_texts()[n_folds].get_text()
+
+
+def test_from_cv_results_effect_kwargs(pyplot, data_binary):
+    """Check that the different keywords arguments are behaving as expected."""
+    X, y = data_binary
+    model = make_pipeline(StandardScaler(), LogisticRegression())
+
+    cv_results = cross_validate(
+        model, X, y, cv=3, return_estimator=True, return_indices=True
+    )
+
+    fold_line_kw = {"color": "red", "linestyle": "--", "linewidth": 2}
+    display = RocCurveDisplay.from_cv_results(
+        cv_results, X, y, fold_line_kw=fold_line_kw
+    )
+
+    for line in display.fold_lines_:
+        assert line.get_color() == fold_line_kw["color"]
+        assert line.get_linestyle() == fold_line_kw["linestyle"]
+        assert line.get_linewidth() == fold_line_kw["linewidth"]
+
+    fold_line_kw = [{"color": "red"}, {"color": "green"}, {"color": "blue"}]
+    display = RocCurveDisplay.from_cv_results(
+        cv_results, X, y, fold_line_kw=fold_line_kw
+    )
+
+    for line, kwargs in zip(display.fold_lines_, fold_line_kw):
+        assert line.get_color() == kwargs["color"]
+
+    aggregate_line_kw = {"color": "red", "linestyle": "--", "linewidth": 2}
+    aggregate_uncertainty_kw = {"alpha": 0.5, "color": "red"}
+    display = RocCurveDisplay.from_cv_results(
+        cv_results,
+        X,
+        y,
+        aggregate_line_kw=aggregate_line_kw,
+        aggregate_uncertainty_kw=aggregate_uncertainty_kw,
+        kind="both",
+    )
+
+    assert display.mean_line_.get_color() == aggregate_line_kw["color"]
+    assert display.mean_line_.get_linestyle() == aggregate_line_kw["linestyle"]
+    assert display.mean_line_.get_linewidth() == aggregate_line_kw["linewidth"]
+
+    # `facecolor` is encoded in RGBA
+    assert_allclose(
+        display.std_area_.get_facecolor(),
+        [[1, 0, 0, aggregate_uncertainty_kw["alpha"]]],
+    )
+
+    chance_level_kw = {"color": "red", "label": "random"}
+    display = RocCurveDisplay.from_cv_results(
+        cv_results, X, y, plot_chance_level=True, chance_level_kw=chance_level_kw
+    )
+
+    assert display.chance_level_.get_color() == chance_level_kw["color"]
+    assert display.chance_level_.get_label() == chance_level_kw["label"]
