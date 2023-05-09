@@ -224,6 +224,26 @@ def test_reconstruct_patches_perfect_color(orange_face):
     np.testing.assert_array_almost_equal(face, face_reconstructed)
 
 
+def test_reconstruct_patches_perfect_strided(downsampled_face):
+    face = downsampled_face
+    p_h, p_w = 16, 16
+    stride = 8
+
+    patches = extract_patches_2d(face, (p_h, p_w), stride=stride)
+    face_reconstructed = reconstruct_from_patches_2d(patches, face.shape, stride=stride)
+    np.testing.assert_array_almost_equal(face, face_reconstructed)
+
+
+def test_reconstruct_patches_perfect_color_strided(orange_face):
+    face = orange_face
+    p_h, p_w = 16, 16
+    stride = 4
+
+    patches = extract_patches_2d(face, (p_h, p_w), stride=stride)
+    face_reconstructed = reconstruct_from_patches_2d(patches, face.shape, stride=stride)
+    np.testing.assert_array_almost_equal(face, face_reconstructed)
+
+
 def test_patch_extractor_fit(downsampled_face_collection):
     faces = downsampled_face_collection
     extr = PatchExtractor(patch_size=(8, 8), max_patches=100, random_state=0)

@@ -243,7 +243,7 @@ def grid_to_graph(
 # From an image to a set of small image patches
 
 
-def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None):
+def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None, stride=1):
     """Compute the number of patches that will be extracted in an image.
 
     Read more in the :ref:`User Guide <image_feature_extraction>`.
@@ -253,7 +253,7 @@ def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None):
     i_h : int
         The image height
     i_w : int
-        The image with
+        The image width
     p_h : int
         The height of a patch
     p_w : int
@@ -262,9 +262,12 @@ def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None):
         The maximum number of patches to extract. If max_patches is a float
         between 0 and 1, it is taken to be a proportion of the total number
         of patches.
+    stride : int or tuple of length arr.ndim, default=1
+        Indicates stride at which extraction shall be performed.
+        If integer is given, then the stride is uniform in all dimensions.
     """
-    n_h = i_h - p_h + 1
-    n_w = i_w - p_w + 1
+    n_h = (i_h - p_h) // stride[0] + 1
+    n_w = (i_w - p_w) // stride[1] + 1
     all_patches = n_h * n_w
 
     if max_patches:
@@ -349,9 +352,12 @@ def _extract_patches(arr, patch_shape=8, extraction_step=1):
             None,
         ],
         "random_state": ["random_state"],
+        "stride": [tuple, Integral],
     }
 )
-def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None):
+def extract_patches_2d(
+    image, patch_size, *, max_patches=None, random_state=None, stride=1
+):
     """Reshape a 2D image into a collection of patches.
 
     The resulting patches are allocated in a dedicated array.
@@ -379,6 +385,10 @@ def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None
         `max_patches` is not None. Use an int to make the randomness
         deterministic.
         See :term:`Glossary <random_state>`.
+
+    stride : int or tuple of length arr.ndim, default=1
+        Indicates stride at which extraction shall be performed.
+        If integer is given, then the stride is uniform in all dimensions.
 
     Returns
     -------
@@ -428,11 +438,14 @@ def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None
     image = image.reshape((i_h, i_w, -1))
     n_colors = image.shape[-1]
 
+    if isinstance(stride, Number):
+        stride = tuple([stride] * image.ndim)
+
     extracted_patches = _extract_patches(
-        image, patch_shape=(p_h, p_w, n_colors), extraction_step=1
+        image, patch_shape=(p_h, p_w, n_colors), extraction_step=stride
     )
 
-    n_patches = _compute_n_patches(i_h, i_w, p_h, p_w, max_patches)
+    n_patches = _compute_n_patches(i_h, i_w, p_h, p_w, max_patches, stride=stride)
     if max_patches:
         rng = check_random_state(random_state)
         i_s = rng.randint(i_h - p_h + 1, size=n_patches)
@@ -449,8 +462,14 @@ def extract_patches_2d(image, patch_size, *, max_patches=None, random_state=None
         return patches
 
 
-@validate_params({"patches": [np.ndarray], "image_size": [tuple, Hidden(list)]})
-def reconstruct_from_patches_2d(patches, image_size):
+@validate_params(
+    {
+        "patches": [np.ndarray],
+        "image_size": [tuple, Hidden(list)],
+        "stride": [tuple, Integral],
+    }
+)
+def reconstruct_from_patches_2d(patches, image_size, stride=1):
     """Reconstruct the image from all of its patches.
 
     Patches are assumed to overlap and the image is constructed by filling in
@@ -471,25 +490,32 @@ def reconstruct_from_patches_2d(patches, image_size):
         (image_height, image_width, n_channels)
         The size of the image that will be reconstructed.
 
+    stride : int or tuple of length arr.ndim, default=1
+        Indicates stride at which extraction shall be performed.
+        If integer is given, then the stride is uniform in all dimensions.
+
     Returns
     -------
     image : ndarray of shape image_size
         The reconstructed image.
     """
+
+    if isinstance(stride, Number):
+        stride = tuple([stride] * (patches.ndim - 1))
+
     i_h, i_w = image_size[:2]
     p_h, p_w = patches.shape[1:3]
     img = np.zeros(image_size)
     # compute the dimensions of the patches array
-    n_h = i_h - p_h + 1
-    n_w = i_w - p_w + 1
-    for p, (i, j) in zip(patches, product(range(n_h), range(n_w))):
+    n_h = (i_h - p_h) + 1
+    n_w = (i_w - p_w) + 1
+    mask = np.zeros((i_h, i_w, 1)[: len(image_size)])
+    for p, (i, j) in zip(
+        patches, product(range(0, n_h, stride[0]), range(0, n_w, stride[1]))
+    ):
         img[i : i + p_h, j : j + p_w] += p
-
-    for i in range(i_h):
-        for j in range(i_w):
-            # divide by the amount of overlap
-            # XXX: is this the most efficient way? memory-wise yes, cpu wise?
-            img[i, j] /= float(min(i + 1, p_h, i_h - i) * min(j + 1, p_w, i_w - j))
+        mask[i : i + p_h, j : j + p_w] += 1
+    img /= mask + 1e-9
     return img
 
 
