@@ -243,7 +243,7 @@ def grid_to_graph(
 # From an image to a set of small image patches
 
 
-def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None, stride=1):
+def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None, stride=(1, 1)):
     """Compute the number of patches that will be extracted in an image.
 
     Read more in the :ref:`User Guide <image_feature_extraction>`.
@@ -262,9 +262,8 @@ def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None, stride=1):
         The maximum number of patches to extract. If max_patches is a float
         between 0 and 1, it is taken to be a proportion of the total number
         of patches.
-    stride : int or tuple of length arr.ndim, default=1
+    stride : tuple of length arr.ndim, default=(1, 1)
         Indicates stride at which extraction shall be performed.
-        If integer is given, then the stride is uniform in all dimensions.
     """
     n_h = (i_h - p_h) // stride[0] + 1
     n_w = (i_w - p_w) // stride[1] + 1
@@ -515,7 +514,7 @@ def reconstruct_from_patches_2d(patches, image_size, stride=1):
     ):
         img[i : i + p_h, j : j + p_w] += p
         mask[i : i + p_h, j : j + p_w] += 1
-    img /= mask + 1e-9
+    img = np.divide(img, mask, where=mask != 0)
     return img
 
 
