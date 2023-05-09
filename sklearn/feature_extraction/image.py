@@ -506,8 +506,8 @@ def reconstruct_from_patches_2d(patches, image_size, stride=1):
     p_h, p_w = patches.shape[1:3]
     img = np.zeros(image_size)
     # compute the dimensions of the patches array
-    n_h = (i_h - p_h) + 1
-    n_w = (i_w - p_w) + 1
+    n_h = i_h - p_h + 1
+    n_w = i_w - p_w + 1
     mask = np.zeros((i_h, i_w, 1)[: len(image_size)])
     for p, (i, j) in zip(
         patches, product(range(0, n_h, stride[0]), range(0, n_w, stride[1]))
