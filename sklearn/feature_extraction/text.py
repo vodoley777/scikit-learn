@@ -34,6 +34,7 @@ from ..utils import _IS_32BIT
 from ..exceptions import NotFittedError
 from ..utils._param_validation import StrOptions, Interval, HasMethods
 from ..utils._param_validation import RealNotInt
+from ..utils._set_output import _get_output_config
 
 
 __all__ = [
@@ -513,6 +514,11 @@ class _VectorizerMixin:
         if len(self.vocabulary_) == 0:
             raise ValueError("Vocabulary is empty")
 
+    def _check_transform_output_config(self):
+        output_config = _get_output_config("transform", estimator=self)["dense"]
+        if output_config == "pandas":
+            raise ValueError("Pandas output does not support sparse data.")
+
     def _validate_ngram_range(self):
         """Check validity of ngram_range parameter"""
         min_n, max_m = self.ngram_range
@@ -876,6 +882,7 @@ class HashingVectorizer(
                 "Iterable over raw text documents expected, string object received."
             )
 
+        self._check_transform_output_config()
         self._validate_ngram_range()
 
         analyzer = self.build_analyzer()
@@ -1364,6 +1371,7 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
             raise ValueError(
                 "Iterable over raw text documents expected, string object received."
             )
+        self._check_transform_output_config()
 
         self._validate_ngram_range()
         self._warn_for_unused_params()
@@ -1425,6 +1433,7 @@ class CountVectorizer(_VectorizerMixin, BaseEstimator):
             raise ValueError(
                 "Iterable over raw text documents expected, string object received."
             )
+        self._check_transform_output_config()
         self._check_vocabulary()
 
         # use the same matrix-building strategy as fit_transform
