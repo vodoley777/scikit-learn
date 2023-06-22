@@ -145,7 +145,8 @@ def _to_graph(
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
     """Graph of the pixel-to-pixel gradient connections.
@@ -196,7 +197,8 @@ def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def grid_to_graph(
     n_x, n_y, n_z=1, *, mask=None, return_as=sparse.coo_matrix, dtype=int
@@ -352,7 +354,8 @@ def _extract_patches(arr, patch_shape=8, extraction_step=1):
         ],
         "random_state": ["random_state"],
         "stride": [tuple, Integral],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def extract_patches_2d(
     image, patch_size, *, max_patches=None, random_state=None, stride=1
@@ -462,11 +465,13 @@ def extract_patches_2d(
 
 
 @validate_params(
+    
     {
         "patches": [np.ndarray],
         "image_size": [tuple, Hidden(list)],
         "stride": [tuple, Integral],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def reconstruct_from_patches_2d(patches, image_size, stride=1):
     """Reconstruct the image from all of its patches.
