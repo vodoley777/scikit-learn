@@ -594,3 +594,11 @@ def _estimator_with_converted_arrays(estimator, converter):
             attribute = converter(attribute)
         setattr(new_estimator, key, attribute)
     return new_estimator
+
+
+def counter_dtype(xp, dtype):  # TODO this is an ugly hack and needs to be replaced
+    return {
+        "16": xp.float16,
+        "32": xp.float32,
+        "64": xp.float64
+    }[str(dtype)[-2:]]
