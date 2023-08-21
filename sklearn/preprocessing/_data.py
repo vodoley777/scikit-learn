@@ -23,7 +23,8 @@ from ..base import (
     _fit_context,
 )
 from ..utils import _array_api, check_array
-from ..utils._array_api import get_namespace
+from ..utils._array_api import (
+    get_namespace, supported_float_dtypes, size, counter_dtype)
 from ..utils._param_validation import Interval, Options, StrOptions, validate_params
 from ..utils.extmath import _incremental_mean_and_var, row_norms
 from ..utils.sparsefuncs import (
@@ -42,7 +43,6 @@ from ..utils.validation import (
     check_is_fitted,
     check_random_state,
 )
-from ..utils._array_api import get_namespace, XP_FLOAT_DTYPES, size, counter_dtype
 from ._encoders import OneHotEncoder
 
 BOUNDS_THRESHOLD = 1e-7
@@ -889,7 +889,7 @@ class StandardScaler(OneToOneFeatureMixin, TransformerMixin, BaseEstimator):
         X = self._validate_data(
             X,
             accept_sparse=("csr", "csc"),
-            dtype=XP_FLOAT_DTYPES(xp),
+            dtype=supported_float_dtypes(xp),
             force_all_finite="allow-nan",
             reset=first_call,
         )
@@ -1028,7 +1028,7 @@ class StandardScaler(OneToOneFeatureMixin, TransformerMixin, BaseEstimator):
             reset=False,
             accept_sparse="csr",
             copy=copy,
-            dtype=XP_FLOAT_DTYPES(xp),
+            dtype=supported_float_dtypes(xp),
             force_all_finite="allow-nan",
         )
 
@@ -1070,7 +1070,7 @@ class StandardScaler(OneToOneFeatureMixin, TransformerMixin, BaseEstimator):
             X,
             accept_sparse="csr",
             copy=copy,
-            dtype=XP_FLOAT_DTYPES(xp),
+            dtype=supported_float_dtypes(xp),
             force_all_finite="allow-nan",
         )
 

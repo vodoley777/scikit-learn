@@ -10,10 +10,6 @@ from .._config import get_config
 from .fixes import parse_version
 
 
-def XP_FLOAT_DTYPES(xp):
-    return xp.float64, xp.float32, xp.float16
-
-
 def yield_namespace_device_dtype_combinations():
     """Yield supported namespace, device, dtype tuples for testing.
 
