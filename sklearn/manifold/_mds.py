@@ -10,6 +10,7 @@ from numbers import Integral, Real
 
 import numpy as np
 from joblib import effective_n_jobs
+from scipy import linalg
 
 from ..base import BaseEstimator, _fit_context
 from ..isotonic import IsotonicRegression
@@ -17,6 +18,7 @@ from ..metrics import euclidean_distances
 from ..utils import check_array, check_random_state, check_symmetric
 from ..utils._param_validation import Hidden, Interval, StrOptions, validate_params
 from ..utils.parallel import Parallel, delayed
+from ..utils.validation import _check_psd_eigenvalues
 
 
 def _smacof_single(
@@ -390,6 +392,72 @@ def smacof(
         return best_pos, best_stress
 
 
+def eigh_scaler(dissimilarities, n_components=2):
+    """
+    Computes multidimensional scaling using eigh solver.
+
+    Parameters
+    ----------
+    dissimilarities : ndarray, shape (n_samples, n_samples)
+        Pairwise dissimilarities between the points. Must be euclidean.
+    n_components : int, optional, default=2
+        Number of dimension in which to immerse the dissimilarities.
+
+    Returns
+    ----------
+    embedding : ndarray, shape (n_samples, n_components)
+        Coordinates of the points in a ``n_components``-space.
+
+    stress : float
+        The final value of the stress (sum of squared distance of the
+        disparities and the distances for all constrained points).
+
+    References
+    ----------
+    "An Introduction to MDS" Florian Wickelmaier
+    Sound Quality Research Unit, Aalborg University, Denmark (2003)
+
+    "Metric and Euclidean properties of dissimilarity coefficients"
+    J. C. Gower and P. Legendre, Journal of Classification 3, 5–48 (1986)
+
+    """
+
+    dissimilarities = check_symmetric(dissimilarities, raise_exception=True)
+
+    # Centering
+    B = dissimilarities**2
+    B = B.astype(np.float64)
+    B -= np.mean(B, axis=0)
+    B -= np.mean(B, axis=1, keepdims=True)
+    B *= -0.5
+
+    w, V = linalg.eigh(B, check_finite=False)
+
+    # `dissimilarities` is Euclidean iff `B` is positive semi-definite.
+    # See "Metric and Euclidean properties of dissimilarity coefficients"
+    # for details
+    try:
+        w = _check_psd_eigenvalues(w)
+    except ValueError:
+        raise ValueError(
+            "Dissimilarity matrix must be euclidean. "
+            "Make sure to pass an euclidean matrix, or use "
+            "dissimilarity='euclidean'."
+        )
+
+    # Get ``n_components`` greatest eigenvalues and corresponding eigenvectors.
+    # Eigenvalues should be in descending order by convention.
+    w = w[::-1][:n_components]
+    V = V[:, ::-1][:, :n_components]
+
+    embedding = np.sqrt(w) * V
+
+    dist = euclidean_distances(embedding)
+    stress = ((dissimilarities.ravel() - dist.ravel()) ** 2).sum() * 0.5
+
+    return embedding, stress
+
+
 class MDS(BaseEstimator):
     """Multidimensional scaling.
 
@@ -402,33 +470,37 @@ class MDS(BaseEstimator):
 
     metric : bool, default=True
         If ``True``, perform metric MDS; otherwise, perform nonmetric MDS.
-        When ``False`` (i.e. non-metric MDS), dissimilarities with 0 are considered as
-        missing values.
+        When ``False`` (i.e. non-metric MDS), dissimilarities with 0 are
+        considered as missing values. If `solver=='eigh'`, metric must be set
+        to ``True``.
 
     n_init : int, default=4
         Number of times the SMACOF algorithm will be run with different
         initializations. The final results will be the best output of the runs,
         determined by the run with the smallest final stress.
+        Ignored if `solver=='eigh'`.
 
-    max_iter : int, default=300
+    max_iter : int, optional, default=300
         Maximum number of iterations of the SMACOF algorithm for a single run.
+        Ignored if `solver=='eigh'`.
 
-    verbose : int, default=0
+    verbose : int, optional, default=0
         Level of verbosity.
 
     eps : float, default=1e-3
         Relative tolerance with respect to stress at which to declare
         convergence. The value of `eps` should be tuned separately depending
-        on whether or not `normalized_stress` is being used.
+        on whether or not `normalized_stress` is being used. Ignored if
+        `solver=='eigh'`.
 
-    n_jobs : int, default=None
+    n_jobs : int or None, optional (default=None)
         The number of jobs to use for the computation. If multiple
         initializations are used (``n_init``), each run of the algorithm is
         computed in parallel.
 
         ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
         ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
-        for more details.
+        for more details. Ignored if `solver=='eigh'`.
 
     random_state : int, RandomState instance or None, default=None
         Determines the random number generator used to initialize the centers.
@@ -444,6 +516,10 @@ class MDS(BaseEstimator):
         - 'precomputed':
             Pre-computed dissimilarities are passed directly to ``fit`` and
             ``fit_transform``.
+
+    solver : {'smacof', 'eigh'}, default = 'smacof'
+        The solver used for solving the MDS problem. The `eigh` solver is only
+        usable when `metric=False` but is often significantly faster.
 
     normalized_stress : bool or "auto" default=False
         Whether use and return normed stress value (Stress-1) instead of raw
@@ -484,6 +560,7 @@ class MDS(BaseEstimator):
 
     n_iter_ : int
         The number of iterations corresponding to the best stress.
+        It is set to ``None`` if ``solver=='eigh'``.
 
     See Also
     --------
@@ -530,6 +607,7 @@ class MDS(BaseEstimator):
         "n_jobs": [None, Integral],
         "random_state": ["random_state"],
         "dissimilarity": [StrOptions({"euclidean", "precomputed"})],
+        "solver": [StrOptions({"smacof", "eigh"})],
         "normalized_stress": [
             "boolean",
             StrOptions({"auto"}),
@@ -549,11 +627,13 @@ class MDS(BaseEstimator):
         n_jobs=None,
         random_state=None,
         dissimilarity="euclidean",
+        solver="smacof",
         normalized_stress="warn",
     ):
         self.n_components = n_components
         self.dissimilarity = dissimilarity
         self.metric = metric
+        self.solver = solver
         self.n_init = n_init
         self.max_iter = max_iter
         self.eps = eps
@@ -582,7 +662,7 @@ class MDS(BaseEstimator):
         init : ndarray of shape (n_samples, n_components), default=None
             Starting configuration of the embedding to initialize the SMACOF
             algorithm. By default, the algorithm is initialized with a randomly
-            chosen array.
+            chosen array. Ignored if ``solver=='eigh'``.
 
         Returns
         -------
@@ -610,7 +690,7 @@ class MDS(BaseEstimator):
         init : ndarray of shape (n_samples, n_components), default=None
             Starting configuration of the embedding to initialize the SMACOF
             algorithm. By default, the algorithm is initialized with a randomly
-            chosen array.
+            chosen array. Ignored if ``solver=='eigh'``.
 
         Returns
         -------
@@ -620,7 +700,7 @@ class MDS(BaseEstimator):
         X = self._validate_data(X)
         if X.shape[0] == X.shape[1] and self.dissimilarity != "precomputed":
             warnings.warn(
-                "The MDS API has changed. ``fit`` now constructs an"
+                "The MDS API has changed. ``fit`` now constructs a"
                 " dissimilarity matrix from data. To use a custom "
                 "dissimilarity matrix, set "
                 "``dissimilarity='precomputed'``."
@@ -631,19 +711,26 @@ class MDS(BaseEstimator):
         elif self.dissimilarity == "euclidean":
             self.dissimilarity_matrix_ = euclidean_distances(X)
 
-        self.embedding_, self.stress_, self.n_iter_ = smacof(
-            self.dissimilarity_matrix_,
-            metric=self.metric,
-            n_components=self.n_components,
-            init=init,
-            n_init=self.n_init,
-            n_jobs=self.n_jobs,
-            max_iter=self.max_iter,
-            verbose=self.verbose,
-            eps=self.eps,
-            random_state=self.random_state,
-            return_n_iter=True,
-            normalized_stress=self.normalized_stress,
-        )
-
+        if self.solver == "smacof":
+            self.embedding_, self.stress_, self.n_iter_ = smacof(
+                self.dissimilarity_matrix_,
+                metric=self.metric,
+                n_components=self.n_components,
+                init=init,
+                n_init=self.n_init,
+                n_jobs=self.n_jobs,
+                max_iter=self.max_iter,
+                verbose=self.verbose,
+                eps=self.eps,
+                random_state=self.random_state,
+                return_n_iter=True,
+                normalized_stress=self.normalized_stress,
+            )
+        elif self.solver == "eigh":
+            if not self.metric:
+                raise ValueError("Using the eigh solver requires metric=True")
+            self.embedding_, self.stress_ = eigh_scaler(
+                self.dissimilarity_matrix_, n_components=self.n_components
+            )
+            self.n_iter_ = None
         return self.embedding_

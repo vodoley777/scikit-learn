@@ -43,12 +43,72 @@ def test_smacof_error():
         mds.smacof(sim, init=Z, n_init=1, normalized_stress="auto")
 
 
+def test_eigh_error():
+    # Non symmetric (dis)similarity matrix:
+    sim = np.array([[0, 5, 9, 4], [5, 0, 2, 2], [3, 2, 0, 1], [4, 2, 1, 0]])
+
+    with pytest.raises(ValueError, match="Array must be symmetric"):
+        mds.eigh_scaler(sim)
+
+    # Non squared (dis)similarity matrix:
+    sim = np.array([[0, 5, 9, 4], [5, 0, 2, 2], [4, 2, 1, 0]])
+
+    with pytest.raises(ValueError, match="array must be 2-dimensional and square"):
+        mds.eigh_scaler(sim)
+
+    # Non Euclidean (dis)similarity matrix:
+    sim = np.array([[0, 12, 3, 4], [12, 0, 2, 2], [3, 2, 0, 1], [4, 2, 1, 0]])
+
+    with pytest.raises(ValueError, match="Dissimilarity matrix must be euclidean"):
+        mds.eigh_scaler(sim)
+
+
 def test_MDS():
     sim = np.array([[0, 5, 3, 4], [5, 0, 2, 2], [3, 2, 0, 1], [4, 2, 1, 0]])
     mds_clf = mds.MDS(
         metric=False, n_jobs=3, dissimilarity="precomputed", normalized_stress="auto"
     )
     mds_clf.fit(sim)
+
+
+def test_MDS_eigh():
+    # Test eigh using example data from "An Introduction to MDS"
+    # Florian Wickelmaier, p 11. Validated against R implementation
+    # (cmdscale) as well.
+    sim = np.array(
+        [[0, 93, 82, 133], [93, 0, 52, 60], [82, 52, 0, 111], [133, 60, 111, 0]]
+    )
+
+    mds_clf = mds.MDS(metric=True, solver="eigh", dissimilarity="precomputed")
+    mds_clf.fit(sim)
+
+    X_true_1 = np.array(
+        [
+            [-62.831, -32.97448],
+            [18.403, 12.02697],
+            [-24.960, 39.71091],
+            [69.388, -18.76340],
+        ]
+    )
+    X_true_2 = np.copy(X_true_1)
+    X_true_2[:, 0] *= -1
+
+    # Signs of columns are dependent on signs of computed eigenvectors
+    # which are arbitrary and meaningless
+    match = False
+    for X_possible in (X_true_1, -X_true_1, X_true_2, -X_true_2):
+        match = match or np.allclose(mds_clf.embedding_, X_possible)
+    assert match
+
+
+def test_nonmetric_mds_eigh_error():
+    sim = np.ones((2, 2))
+    mds_clf = mds.MDS(metric=False, solver="eigh")
+    msg = "Using the eigh solver requires metric=True"
+    with pytest.raises(ValueError, match=msg):
+        mds_clf.fit(sim)
+    with pytest.raises(ValueError, match=msg):
+        mds_clf.fit_transform(sim)
 
 
 @pytest.mark.parametrize("k", [0.5, 1.5, 2])
