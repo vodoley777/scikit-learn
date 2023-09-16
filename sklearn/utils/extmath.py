@@ -20,7 +20,7 @@ from scipy import linalg, sparse
 
 from ..utils._param_validation import Interval, StrOptions, validate_params
 from . import check_random_state
-from ._array_api import _is_numpy_namespace, device, get_namespace
+from ._array_api import _is_numpy_namespace, device, get_namespace, isdtype
 from ._logistic_sigmoid import _log_logistic_sigmoid
 from .sparsefuncs_fast import csr_row_norms
 from .validation import check_array
@@ -1030,9 +1030,8 @@ def _safe_accumulator_op(op, x, *args, **kwargs):
     result
         The output of the accumulator function passed to this function.
     """
-    from ..utils._array_api import isdtype, get_namespace
     xp, _ = get_namespace(x)
-    if isdtype(x.dtype, "real floating", xp=xp) and x.dtype in (xp.float32, xp.float64):  # what about int, etc.?
+    if isdtype(x.dtype, "real floating", xp=xp) and xp.finfo(x.dtype).bits < 64:
         result = op(x, *args, **kwargs, dtype=xp.float64)
     else:
         result = op(x, *args, **kwargs)
@@ -1145,7 +1144,7 @@ def _incremental_mean_and_var(
         # correction term of the corrected 2 pass algorithm.
         # See "Algorithms for computing the sample variance: analysis
         # and recommendations", by Chan, Golub, and LeVeque.
-        new_unnormalized_variance -= correction ** 2 / new_sample_count
+        new_unnormalized_variance -= correction**2 / new_sample_count
 
         last_unnormalized_variance = last_variance * last_sample_count
 
