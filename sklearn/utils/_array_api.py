@@ -592,10 +592,6 @@ def _estimator_with_converted_arrays(estimator, converter):
     return new_estimator
 
 
-def counter_dtype(xp, dtype):  # TODO this is an ugly hack and needs to be replaced
-    return {"16": xp.float16, "32": xp.float32, "64": xp.float64}[str(dtype)[-2:]]
-
-
 def _atol_for_type(dtype):
     """Return the absolute tolerance for a given dtype."""
     return numpy.finfo(dtype).eps * 100
