@@ -54,7 +54,6 @@ from sklearn.utils._testing import (
     skip_if_32bit,
 )
 from sklearn.utils.estimator_checks import (
-    _array_api_for_tests,
     _get_check_estimator_ids,
     check_array_api_input_and_values,
 )
@@ -692,7 +691,7 @@ def test_standard_check_array_of_inverse_transform():
 )
 @pytest.mark.parametrize(
     "estimator",
-    [MaxAbsScaler(), MinMaxScaler()],
+    [MaxAbsScaler(), MinMaxScaler(), StandardScaler()],
     ids=_get_check_estimator_ids,
 )
 def test_scaler_array_api_compliance(estimator, check, array_namespace, device, dtype):
@@ -2577,20 +2576,3 @@ def test_power_transformer_constant_feature(standardize):
             assert_allclose(Xt_, np.zeros_like(X))
         else:
             assert_allclose(Xt_, X)
-
-
-@pytest.mark.parametrize(
-    "array_namespace, device, dtype", yield_namespace_device_dtype_combinations()
-)
-def test_standard_scaler_array_api_compliance(array_namespace, device, dtype):
-    xp, device, dtype = _array_api_for_tests(array_namespace, device, dtype)
-
-    from sklearn.datasets import make_classification
-
-    X, _ = make_classification(random_state=0)
-    X = X.astype(dtype, copy=False)
-
-    X_xp = xp.asarray(X, device=device)
-
-    scale = StandardScaler()
-    scale.fit_transform(X_xp)
