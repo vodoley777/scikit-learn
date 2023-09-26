@@ -1,13 +1,12 @@
 """Test truncated SVD transformer."""
 
 import numpy as np
+import pytest
 import scipy.sparse as sp
 
-import pytest
-
-from sklearn.decomposition import TruncatedSVD, PCA
+from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.utils import check_random_state
-from sklearn.utils._testing import assert_array_less, assert_allclose
+from sklearn.utils._testing import assert_allclose, assert_array_less
 
 SVD_SOLVERS = ["arpack", "randomized"]
 
@@ -146,14 +145,14 @@ def test_singular_values_consistency(solver):
     # Compare to the Frobenius norm
     X_pca = pca.transform(X)
     assert_allclose(
-        np.sum(pca.singular_values_ ** 2.0),
+        np.sum(pca.singular_values_**2.0),
         np.linalg.norm(X_pca, "fro") ** 2.0,
         rtol=1e-2,
     )
 
     # Compare to the 2-norms of the score vectors
     assert_allclose(
-        pca.singular_values_, np.sqrt(np.sum(X_pca ** 2.0, axis=0)), rtol=1e-2
+        pca.singular_values_, np.sqrt(np.sum(X_pca**2.0, axis=0)), rtol=1e-2
     )
 
 
@@ -169,7 +168,7 @@ def test_singular_values_expected(solver):
     pca = TruncatedSVD(n_components=3, algorithm=solver, random_state=rng)
     X_pca = pca.fit_transform(X)
 
-    X_pca /= np.sqrt(np.sum(X_pca ** 2.0, axis=0))
+    X_pca /= np.sqrt(np.sum(X_pca**2.0, axis=0))
     X_pca[:, 0] *= 3.142
     X_pca[:, 1] *= 2.718
 

@@ -4,11 +4,19 @@
 #         Tom Dupre la Tour
 #
 # License: BSD 3 clause (C) INRIA, University of Amsterdam
-from ._base import KNeighborsMixin, RadiusNeighborsMixin
-from ._base import NeighborsBase
-from ._unsupervised import NearestNeighbors
-from ..base import TransformerMixin, _ClassNamePrefixFeaturesOutMixin
+import itertools
+
+from ..base import ClassNamePrefixFeaturesOutMixin, TransformerMixin, _fit_context
+from ..utils._param_validation import (
+    Integral,
+    Interval,
+    Real,
+    StrOptions,
+    validate_params,
+)
 from ..utils.validation import check_is_fitted
+from ._base import VALID_METRICS, KNeighborsMixin, NeighborsBase, RadiusNeighborsMixin
+from ._unsupervised import NearestNeighbors
 
 
 def _check_params(X, metric, p, metric_params):
@@ -35,6 +43,19 @@ def _query_include_self(X, include_self, mode):
     return X
 
 
+@validate_params(
+    {
+        "X": ["array-like", KNeighborsMixin],
+        "n_neighbors": [Interval(Integral, 1, None, closed="left")],
+        "mode": [StrOptions({"connectivity", "distance"})],
+        "metric": [StrOptions(set(itertools.chain(*VALID_METRICS.values()))), callable],
+        "p": [Interval(Real, 0, None, closed="right"), None],
+        "metric_params": [dict, None],
+        "include_self": ["boolean", StrOptions({"auto"})],
+        "n_jobs": [Integral, None],
+    },
+    prefer_skip_nested_validation=False,  # metric is not validated yet
+)
 def kneighbors_graph(
     X,
     n_neighbors,
@@ -46,15 +67,14 @@ def kneighbors_graph(
     include_self=False,
     n_jobs=None,
 ):
-    """Computes the (weighted) graph of k-Neighbors for points in X
+    """Compute the (weighted) graph of k-Neighbors for points in X.
 
     Read more in the :ref:`User Guide <unsupervised_neighbors>`.
 
     Parameters
     ----------
-    X : array-like of shape (n_samples, n_features) or BallTree
-        Sample data, in the form of a numpy array or a precomputed
-        :class:`BallTree`.
+    X : array-like of shape (n_samples, n_features)
+        Sample data.
 
     n_neighbors : int
         Number of neighbors for each sample.
@@ -65,21 +85,22 @@ def kneighbors_graph(
         between neighbors according to the given metric.
 
     metric : str, default='minkowski'
-        The distance metric to use for the tree. The default metric is
-        minkowski, and with p=2 is equivalent to the standard Euclidean
-        metric.
-        For a list of available metrics, see the documentation of
-        :class:`~sklearn.metrics.DistanceMetric` and the metrics listed in
-        `sklearn.metrics.pairwise.PAIRWISE_DISTANCE_FUNCTIONS`. Note that the
-        "cosine" metric uses :func:`~sklearn.metrics.pairwise.cosine_distances`.
+        Metric to use for distance computation. Default is "minkowski", which
+        results in the standard Euclidean distance when p = 2. See the
+        documentation of `scipy.spatial.distance
+        <https://docs.scipy.org/doc/scipy/reference/spatial.distance.html>`_ and
+        the metrics listed in
+        :class:`~sklearn.metrics.pairwise.distance_metrics` for valid metric
+        values.
 
-    p : int, default=2
-        Power parameter for the Minkowski metric. When p = 1, this is
-        equivalent to using manhattan_distance (l1), and euclidean_distance
-        (l2) for p = 2. For arbitrary p, minkowski_distance (l_p) is used.
+    p : float, default=2
+        Power parameter for the Minkowski metric. When p = 1, this is equivalent
+        to using manhattan_distance (l1), and euclidean_distance (l2) for p = 2.
+        For arbitrary p, minkowski_distance (l_p) is used. This parameter is expected
+        to be positive.
 
     metric_params : dict, default=None
-        additional keyword arguments for the metric function.
+        Additional keyword arguments for the metric function.
 
     include_self : bool or 'auto', default=False
         Whether or not to mark each sample as the first nearest neighbor to
@@ -98,6 +119,10 @@ def kneighbors_graph(
         Graph where A[i, j] is assigned the weight of edge that
         connects i to j. The matrix is of CSR format.
 
+    See Also
+    --------
+    radius_neighbors_graph: Compute the (weighted) graph of Neighbors for points in X.
+
     Examples
     --------
     >>> X = [[0], [3], [1]]
@@ -107,10 +132,6 @@ def kneighbors_graph(
     array([[1., 0., 1.],
            [0., 1., 1.],
            [1., 0., 1.]])
-
-    See Also
-    --------
-    radius_neighbors_graph
     """
     if not isinstance(X, KNeighborsMixin):
         X = NearestNeighbors(
@@ -127,6 +148,19 @@ def kneighbors_graph(
     return X.kneighbors_graph(X=query, n_neighbors=n_neighbors, mode=mode)
 
 
+@validate_params(
+    {
+        "X": ["array-like", RadiusNeighborsMixin],
+        "radius": [Interval(Real, 0, None, closed="both")],
+        "mode": [StrOptions({"connectivity", "distance"})],
+        "metric": [StrOptions(set(itertools.chain(*VALID_METRICS.values()))), callable],
+        "p": [Interval(Real, 0, None, closed="right"), None],
+        "metric_params": [dict, None],
+        "include_self": ["boolean", StrOptions({"auto"})],
+        "n_jobs": [Integral, None],
+    },
+    prefer_skip_nested_validation=False,  # metric is not validated yet
+)
 def radius_neighbors_graph(
     X,
     radius,
@@ -138,7 +172,7 @@ def radius_neighbors_graph(
     include_self=False,
     n_jobs=None,
 ):
-    """Computes the (weighted) graph of Neighbors for points in X
+    """Compute the (weighted) graph of Neighbors for points in X.
 
     Neighborhoods are restricted the points at a distance lower than
     radius.
@@ -147,9 +181,8 @@ def radius_neighbors_graph(
 
     Parameters
     ----------
-    X : array-like of shape (n_samples, n_features) or BallTree
-        Sample data, in the form of a numpy array or a precomputed
-        :class:`BallTree`.
+    X : array-like of shape (n_samples, n_features)
+        Sample data.
 
     radius : float
         Radius of neighborhoods.
@@ -160,21 +193,21 @@ def radius_neighbors_graph(
         between neighbors according to the given metric.
 
     metric : str, default='minkowski'
-        The distance metric to use for the tree. The default metric is
-        minkowski, and with p=2 is equivalent to the standard Euclidean
-        metric.
-        For a list of available metrics, see the documentation of
-        :class:`~sklearn.metrics.DistanceMetric` and the metrics listed in
-        `sklearn.metrics.pairwise.PAIRWISE_DISTANCE_FUNCTIONS`. Note that the
-        "cosine" metric uses :func:`~sklearn.metrics.pairwise.cosine_distances`.
+        Metric to use for distance computation. Default is "minkowski", which
+        results in the standard Euclidean distance when p = 2. See the
+        documentation of `scipy.spatial.distance
+        <https://docs.scipy.org/doc/scipy/reference/spatial.distance.html>`_ and
+        the metrics listed in
+        :class:`~sklearn.metrics.pairwise.distance_metrics` for valid metric
+        values.
 
-    p : int, default=2
+    p : float, default=2
         Power parameter for the Minkowski metric. When p = 1, this is
         equivalent to using manhattan_distance (l1), and euclidean_distance
         (l2) for p = 2. For arbitrary p, minkowski_distance (l_p) is used.
 
     metric_params : dict, default=None
-        additional keyword arguments for the metric function.
+        Additional keyword arguments for the metric function.
 
     include_self : bool or 'auto', default=False
         Whether or not to mark each sample as the first nearest neighbor to
@@ -193,6 +226,10 @@ def radius_neighbors_graph(
         Graph where A[i, j] is assigned the weight of edge that connects
         i to j. The matrix is of CSR format.
 
+    See Also
+    --------
+    kneighbors_graph: Compute the weighted graph of k-neighbors for points in X.
+
     Examples
     --------
     >>> X = [[0], [3], [1]]
@@ -203,10 +240,6 @@ def radius_neighbors_graph(
     array([[1., 0., 1.],
            [0., 1., 0.],
            [1., 0., 1.]])
-
-    See Also
-    --------
-    kneighbors_graph
     """
     if not isinstance(X, RadiusNeighborsMixin):
         X = NearestNeighbors(
@@ -224,7 +257,7 @@ def radius_neighbors_graph(
 
 
 class KNeighborsTransformer(
-    _ClassNamePrefixFeaturesOutMixin, KNeighborsMixin, TransformerMixin, NeighborsBase
+    ClassNamePrefixFeaturesOutMixin, KNeighborsMixin, TransformerMixin, NeighborsBase
 ):
     """Transform X into a (weighted) graph of k nearest neighbors.
 
@@ -266,41 +299,32 @@ class KNeighborsTransformer(
         nature of the problem.
 
     metric : str or callable, default='minkowski'
-        Metric to use for distance computation. Any metric from scikit-learn
-        or scipy.spatial.distance can be used.
+        Metric to use for distance computation. Default is "minkowski", which
+        results in the standard Euclidean distance when p = 2. See the
+        documentation of `scipy.spatial.distance
+        <https://docs.scipy.org/doc/scipy/reference/spatial.distance.html>`_ and
+        the metrics listed in
+        :class:`~sklearn.metrics.pairwise.distance_metrics` for valid metric
+        values.
 
-        If metric is a callable function, it is called on each
-        pair of instances (rows) and the resulting value recorded. The callable
-        should take two arrays as input and return one value indicating the
-        distance between them. This works for Scipy's metrics, but is less
+        If metric is a callable function, it takes two arrays representing 1D
+        vectors as inputs and must return one value indicating the distance
+        between those vectors. This works for Scipy's metrics, but is less
         efficient than passing the metric name as a string.
 
         Distance matrices are not supported.
 
-        Valid values for metric are:
-
-        - from scikit-learn: ['cityblock', 'cosine', 'euclidean', 'l1', 'l2',
-          'manhattan']
-
-        - from scipy.spatial.distance: ['braycurtis', 'canberra', 'chebyshev',
-          'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
-          'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao',
-          'seuclidean', 'sokalmichener', 'sokalsneath', 'sqeuclidean',
-          'yule']
-
-        See the documentation for scipy.spatial.distance for details on these
-        metrics.
-
-    p : int, default=2
+    p : float, default=2
         Parameter for the Minkowski metric from
         sklearn.metrics.pairwise.pairwise_distances. When p = 1, this is
         equivalent to using manhattan_distance (l1), and euclidean_distance
         (l2) for p = 2. For arbitrary p, minkowski_distance (l_p) is used.
+        This parameter is expected to be positive.
 
     metric_params : dict, default=None
         Additional keyword arguments for the metric function.
 
-    n_jobs : int, default=1
+    n_jobs : int, default=None
         The number of parallel jobs to run for neighbors search.
         If ``-1``, then the number of jobs is set to the number of CPU cores.
 
@@ -351,6 +375,12 @@ class KNeighborsTransformer(
     (178, 178)
     """
 
+    _parameter_constraints: dict = {
+        **NeighborsBase._parameter_constraints,
+        "mode": [StrOptions({"distance", "connectivity"})],
+    }
+    _parameter_constraints.pop("radius")
+
     def __init__(
         self,
         *,
@@ -361,7 +391,7 @@ class KNeighborsTransformer(
         metric="minkowski",
         p=2,
         metric_params=None,
-        n_jobs=1,
+        n_jobs=None,
     ):
         super(KNeighborsTransformer, self).__init__(
             n_neighbors=n_neighbors,
@@ -375,6 +405,10 @@ class KNeighborsTransformer(
         )
         self.mode = mode
 
+    @_fit_context(
+        # KNeighborsTransformer.metric is not validated yet
+        prefer_skip_nested_validation=False
+    )
     def fit(self, X, y=None):
         """Fit the k-nearest neighbors transformer from the training dataset.
 
@@ -450,7 +484,7 @@ class KNeighborsTransformer(
 
 
 class RadiusNeighborsTransformer(
-    _ClassNamePrefixFeaturesOutMixin,
+    ClassNamePrefixFeaturesOutMixin,
     RadiusNeighborsMixin,
     TransformerMixin,
     NeighborsBase,
@@ -493,41 +527,32 @@ class RadiusNeighborsTransformer(
         nature of the problem.
 
     metric : str or callable, default='minkowski'
-        Metric to use for distance computation. Any metric from scikit-learn
-        or scipy.spatial.distance can be used.
+        Metric to use for distance computation. Default is "minkowski", which
+        results in the standard Euclidean distance when p = 2. See the
+        documentation of `scipy.spatial.distance
+        <https://docs.scipy.org/doc/scipy/reference/spatial.distance.html>`_ and
+        the metrics listed in
+        :class:`~sklearn.metrics.pairwise.distance_metrics` for valid metric
+        values.
 
-        If metric is a callable function, it is called on each
-        pair of instances (rows) and the resulting value recorded. The callable
-        should take two arrays as input and return one value indicating the
-        distance between them. This works for Scipy's metrics, but is less
+        If metric is a callable function, it takes two arrays representing 1D
+        vectors as inputs and must return one value indicating the distance
+        between those vectors. This works for Scipy's metrics, but is less
         efficient than passing the metric name as a string.
 
         Distance matrices are not supported.
 
-        Valid values for metric are:
-
-        - from scikit-learn: ['cityblock', 'cosine', 'euclidean', 'l1', 'l2',
-          'manhattan']
-
-        - from scipy.spatial.distance: ['braycurtis', 'canberra', 'chebyshev',
-          'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
-          'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao',
-          'seuclidean', 'sokalmichener', 'sokalsneath', 'sqeuclidean',
-          'yule']
-
-        See the documentation for scipy.spatial.distance for details on these
-        metrics.
-
-    p : int, default=2
+    p : float, default=2
         Parameter for the Minkowski metric from
         sklearn.metrics.pairwise.pairwise_distances. When p = 1, this is
         equivalent to using manhattan_distance (l1), and euclidean_distance
         (l2) for p = 2. For arbitrary p, minkowski_distance (l_p) is used.
+        This parameter is expected to be positive.
 
     metric_params : dict, default=None
         Additional keyword arguments for the metric function.
 
-    n_jobs : int, default=1
+    n_jobs : int, default=None
         The number of parallel jobs to run for neighbors search.
         If ``-1``, then the number of jobs is set to the number of CPU cores.
 
@@ -582,6 +607,12 @@ class RadiusNeighborsTransformer(
     [ 29  15 111  11  12]
     """
 
+    _parameter_constraints: dict = {
+        **NeighborsBase._parameter_constraints,
+        "mode": [StrOptions({"distance", "connectivity"})],
+    }
+    _parameter_constraints.pop("n_neighbors")
+
     def __init__(
         self,
         *,
@@ -592,7 +623,7 @@ class RadiusNeighborsTransformer(
         metric="minkowski",
         p=2,
         metric_params=None,
-        n_jobs=1,
+        n_jobs=None,
     ):
         super(RadiusNeighborsTransformer, self).__init__(
             n_neighbors=None,
@@ -606,6 +637,10 @@ class RadiusNeighborsTransformer(
         )
         self.mode = mode
 
+    @_fit_context(
+        # RadiusNeighborsTransformer.metric is not validated yet
+        prefer_skip_nested_validation=False
+    )
     def fit(self, X, y=None):
         """Fit the radius neighbors transformer from the training dataset.
 

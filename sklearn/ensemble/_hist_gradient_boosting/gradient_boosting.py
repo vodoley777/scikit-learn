@@ -1,49 +1,54 @@
 """Fast Gradient Boosting decision trees for classification and regression."""
 # Author: Nicolas Hug
 
+import itertools
 from abc import ABC, abstractmethod
 from functools import partial
-import warnings
+from numbers import Integral, Real
+from timeit import default_timer as time
 
 import numpy as np
-from timeit import default_timer as time
+
 from ..._loss.loss import (
     _LOSSES,
     BaseLoss,
-    AbsoluteError,
     HalfBinomialLoss,
+    HalfGammaLoss,
     HalfMultinomialLoss,
     HalfPoissonLoss,
-    HalfSquaredError,
+    PinballLoss,
 )
-from ...base import BaseEstimator, RegressorMixin, ClassifierMixin, is_classifier
-from ...utils import check_random_state, resample
-from ...utils.validation import (
-    check_is_fitted,
-    check_consistent_length,
-    _check_sample_weight,
+from ...base import (
+    BaseEstimator,
+    ClassifierMixin,
+    RegressorMixin,
+    _fit_context,
+    is_classifier,
 )
-from ...utils._openmp_helpers import _openmp_effective_n_threads
-from ...utils.multiclass import check_classification_targets
 from ...metrics import check_scoring
 from ...model_selection import train_test_split
 from ...preprocessing import LabelEncoder
+from ...utils import check_random_state, compute_sample_weight, resample
+from ...utils._openmp_helpers import _openmp_effective_n_threads
+from ...utils._param_validation import Interval, RealNotInt, StrOptions
+from ...utils.multiclass import check_classification_targets
+from ...utils.validation import (
+    _check_monotonic_cst,
+    _check_sample_weight,
+    check_consistent_length,
+    check_is_fitted,
+)
 from ._gradient_boosting import _update_raw_predictions
-from .common import Y_DTYPE, X_DTYPE, X_BINNED_DTYPE, G_H_DTYPE
-
 from .binning import _BinMapper
+from .common import G_H_DTYPE, X_DTYPE, Y_DTYPE
 from .grower import TreeGrower
 
-
 _LOSSES = _LOSSES.copy()
-# TODO: Remove least_squares and least_absolute_deviation in v1.2
 _LOSSES.update(
     {
-        "least_squares": HalfSquaredError,
-        "least_absolute_deviation": AbsoluteError,
         "poisson": HalfPoissonLoss,
-        "binary_crossentropy": HalfBinomialLoss,
-        "categorical_crossentropy": HalfMultinomialLoss,
+        "gamma": HalfGammaLoss,
+        "quantile": PinballLoss,
     }
 )
 
@@ -54,13 +59,23 @@ def _update_leaves_values(loss, grower, y_true, raw_prediction, sample_weight):
     Update equals:
         loss.fit_intercept_only(y_true - raw_prediction)
 
-    This is only applied if loss.need_update_leaves_values is True.
+    This is only applied if loss.differentiable is False.
     Note: It only works, if the loss is a function of the residual, as is the
     case for AbsoluteError and PinballLoss. Otherwise, one would need to get
     the minimum of loss(y_true, raw_prediction + x) in x. A few examples:
       - AbsoluteError: median(y_true - raw_prediction).
       - PinballLoss: quantile(y_true - raw_prediction).
-    See also notes about need_update_leaves_values in BaseLoss.
+
+    More background:
+    For the standard gradient descent method according to "Greedy Function
+    Approximation: A Gradient Boosting Machine" by Friedman, all loss functions but the
+    squared loss need a line search step. BaseHistGradientBoosting, however, implements
+    a so called Newton boosting where the trees are fitted to a 2nd order
+    approximations of the loss in terms of gradients and hessians. In this case, the
+    line search step is only necessary if the loss is not smooth, i.e. not
+    differentiable, which renders the 2nd order approximation invalid. In fact,
+    non-smooth losses arbitrarily set hessians to 1 and effectively use the standard
+    gradient descent method with line search.
     """
     # TODO: Ideally this should be computed in parallel over the leaves using something
     # similar to _update_raw_predictions(), but this requires a cython version of
@@ -82,6 +97,37 @@ def _update_leaves_values(loss, grower, y_true, raw_prediction, sample_weight):
 class BaseHistGradientBoosting(BaseEstimator, ABC):
     """Base class for histogram-based gradient boosting estimators."""
 
+    _parameter_constraints: dict = {
+        "loss": [BaseLoss],
+        "learning_rate": [Interval(Real, 0, None, closed="neither")],
+        "max_iter": [Interval(Integral, 1, None, closed="left")],
+        "max_leaf_nodes": [Interval(Integral, 2, None, closed="left"), None],
+        "max_depth": [Interval(Integral, 1, None, closed="left"), None],
+        "min_samples_leaf": [Interval(Integral, 1, None, closed="left")],
+        "l2_regularization": [Interval(Real, 0, None, closed="left")],
+        "monotonic_cst": ["array-like", dict, None],
+        "interaction_cst": [
+            list,
+            tuple,
+            StrOptions({"pairwise", "no_interactions"}),
+            None,
+        ],
+        "n_iter_no_change": [Interval(Integral, 1, None, closed="left")],
+        "validation_fraction": [
+            Interval(RealNotInt, 0, 1, closed="neither"),
+            Interval(Integral, 1, None, closed="left"),
+            None,
+        ],
+        "tol": [Interval(Real, 0, None, closed="left")],
+        "max_bins": [Interval(Integral, 2, 255, closed="both")],
+        "categorical_features": ["array-like", None],
+        "warm_start": ["boolean"],
+        "early_stopping": [StrOptions({"auto"}), "boolean"],
+        "scoring": [str, callable, None],
+        "verbose": ["verbose"],
+        "random_state": ["random_state"],
+    }
+
     @abstractmethod
     def __init__(
         self,
@@ -96,6 +142,7 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
         max_bins,
         categorical_features,
         monotonic_cst,
+        interaction_cst,
         warm_start,
         early_stopping,
         scoring,
@@ -114,6 +161,7 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
         self.l2_regularization = l2_regularization
         self.max_bins = max_bins
         self.monotonic_cst = monotonic_cst
+        self.interaction_cst = interaction_cst
         self.categorical_features = categorical_features
         self.warm_start = warm_start
         self.early_stopping = early_stopping
@@ -129,45 +177,18 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
 
         The parameters that are directly passed to the grower are checked in
         TreeGrower."""
-
-        if self.loss not in self._VALID_LOSSES and not isinstance(self.loss, BaseLoss):
-            raise ValueError(
-                "Loss {} is not supported for {}. Accepted losses: {}.".format(
-                    self.loss, self.__class__.__name__, ", ".join(self._VALID_LOSSES)
-                )
-            )
-
-        if self.learning_rate <= 0:
-            raise ValueError(
-                "learning_rate={} must be strictly positive".format(self.learning_rate)
-            )
-        if self.max_iter < 1:
-            raise ValueError(
-                "max_iter={} must not be smaller than 1.".format(self.max_iter)
-            )
-        if self.n_iter_no_change < 0:
-            raise ValueError(
-                "n_iter_no_change={} must be positive.".format(self.n_iter_no_change)
-            )
-        if self.validation_fraction is not None and self.validation_fraction <= 0:
-            raise ValueError(
-                "validation_fraction={} must be strictly positive, or None.".format(
-                    self.validation_fraction
-                )
-            )
-        if self.tol < 0:
-            raise ValueError("tol={} must not be smaller than 0.".format(self.tol))
-
-        if not (2 <= self.max_bins <= 255):
-            raise ValueError(
-                "max_bins={} should be no smaller than 2 "
-                "and no larger than 255.".format(self.max_bins)
-            )
-
         if self.monotonic_cst is not None and self.n_trees_per_iteration_ != 1:
             raise ValueError(
                 "monotonic constraints are not supported for multiclass classification."
             )
+
+    def _finalize_sample_weight(self, sample_weight, y):
+        """Finalize sample weight.
+
+        Used by subclasses to adjust sample_weights. This is useful for implementing
+        class weights.
+        """
+        return sample_weight
 
     def _check_categories(self, X):
         """Check and validate categorical features in X
@@ -191,16 +212,43 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
         if categorical_features.size == 0:
             return None, None
 
-        if categorical_features.dtype.kind not in ("i", "b"):
+        if categorical_features.dtype.kind not in ("i", "b", "U", "O"):
             raise ValueError(
-                "categorical_features must be an array-like of "
-                "bools or array-like of ints."
+                "categorical_features must be an array-like of bool, int or "
+                f"str, got: {categorical_features.dtype.name}."
             )
+
+        if categorical_features.dtype.kind == "O":
+            types = set(type(f) for f in categorical_features)
+            if types != {str}:
+                raise ValueError(
+                    "categorical_features must be an array-like of bool, int or "
+                    f"str, got: {', '.join(sorted(t.__name__ for t in types))}."
+                )
 
         n_features = X.shape[1]
 
-        # check for categorical features as indices
-        if categorical_features.dtype.kind == "i":
+        if categorical_features.dtype.kind in ("U", "O"):
+            # check for feature names
+            if not hasattr(self, "feature_names_in_"):
+                raise ValueError(
+                    "categorical_features should be passed as an array of "
+                    "integers or as a boolean mask when the model is fitted "
+                    "on data without feature names."
+                )
+            is_categorical = np.zeros(n_features, dtype=bool)
+            feature_names = self.feature_names_in_.tolist()
+            for feature_name in categorical_features:
+                try:
+                    is_categorical[feature_names.index(feature_name)] = True
+                except ValueError as e:
+                    raise ValueError(
+                        f"categorical_features has a item value '{feature_name}' "
+                        "which is not a valid feature name of the training "
+                        f"data. Observed feature names: {feature_names}"
+                    ) from e
+        elif categorical_features.dtype.kind == "i":
+            # check for categorical features as indices
             if (
                 np.max(categorical_features) >= n_features
                 or np.min(categorical_features) < 0
@@ -223,9 +271,9 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
         if not np.any(is_categorical):
             return None, None
 
-        # compute the known categories in the training data. We need to do
-        # that here instead of in the BinMapper because in case of early
-        # stopping, the mapper only gets a fraction of the training data.
+        # Compute the known categories in the training data. We cannot do this
+        # in the BinMapper because it only gets a fraction of the training data
+        # when early stopping is enabled.
         known_categories = []
 
         for f_idx in range(n_features):
@@ -235,18 +283,29 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
                 if missing.any():
                     categories = categories[~missing]
 
+                # Treat negative values for categorical features as missing values.
+                negative_categories = categories < 0
+                if negative_categories.any():
+                    categories = categories[~negative_categories]
+
+                if hasattr(self, "feature_names_in_"):
+                    feature_name = f"'{self.feature_names_in_[f_idx]}'"
+                else:
+                    feature_name = f"at index {f_idx}"
+
                 if categories.size > self.max_bins:
                     raise ValueError(
-                        f"Categorical feature at index {f_idx} is "
-                        "expected to have a "
-                        f"cardinality <= {self.max_bins}"
+                        f"Categorical feature {feature_name} is expected to "
+                        f"have a cardinality <= {self.max_bins} but actually "
+                        f"has a cardinality of {categories.size}."
                     )
 
                 if (categories >= self.max_bins).any():
                     raise ValueError(
-                        f"Categorical feature at index {f_idx} is "
-                        "expected to be encoded with "
-                        f"values < {self.max_bins}"
+                        f"Categorical feature {feature_name} is expected to "
+                        f"be encoded with values < {self.max_bins} but the "
+                        "largest value for the encoded categories is "
+                        f"{categories.max()}."
                     )
             else:
                 categories = None
@@ -254,6 +313,44 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
 
         return is_categorical, known_categories
 
+    def _check_interaction_cst(self, n_features):
+        """Check and validation for interaction constraints."""
+        if self.interaction_cst is None:
+            return None
+
+        if self.interaction_cst == "no_interactions":
+            interaction_cst = [[i] for i in range(n_features)]
+        elif self.interaction_cst == "pairwise":
+            interaction_cst = itertools.combinations(range(n_features), 2)
+        else:
+            interaction_cst = self.interaction_cst
+
+        try:
+            constraints = [set(group) for group in interaction_cst]
+        except TypeError:
+            raise ValueError(
+                "Interaction constraints must be a sequence of tuples or lists, got:"
+                f" {self.interaction_cst!r}."
+            )
+
+        for group in constraints:
+            for x in group:
+                if not (isinstance(x, Integral) and 0 <= x < n_features):
+                    raise ValueError(
+                        "Interaction constraints must consist of integer indices in"
+                        f" [0, n_features - 1] = [0, {n_features - 1}], specifying the"
+                        " position of features, got invalid indices:"
+                        f" {group!r}"
+                    )
+
+        # Add all not listed features as own group by default.
+        rest = set(range(n_features)) - set().union(*constraints)
+        if len(rest) > 0:
+            constraints.append(rest)
+
+        return constraints
+
+    @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y, sample_weight=None):
         """Fit the gradient boosting model.
 
@@ -291,20 +388,26 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
             # TODO: remove when PDP supports sample weights
             self._fitted_with_sw = True
 
+        sample_weight = self._finalize_sample_weight(sample_weight, y)
+
         rng = check_random_state(self.random_state)
 
-        # When warm starting, we want to re-use the same seed that was used
+        # When warm starting, we want to reuse the same seed that was used
         # the first time fit was called (e.g. for subsampling or for the
         # train/val split).
         if not (self.warm_start and self._is_fitted()):
             self._random_seed = rng.randint(np.iinfo(np.uint32).max, dtype="u8")
 
         self._validate_parameters()
+        monotonic_cst = _check_monotonic_cst(self, self.monotonic_cst)
 
         # used for validation in predict
         n_samples, self._n_features = X.shape
 
         self.is_categorical_, known_categories = self._check_categories(X)
+
+        # Encode constraints into a list of sets of features indices (integers).
+        interaction_cst = self._check_interaction_cst(self._n_features)
 
         # we need this stateful variable to tell raw_predict() that it was
         # called from fit() (this current method), and that the data it has
@@ -445,7 +548,7 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
                     # we're going to compute scoring w.r.t the loss. As losses
                     # take raw predictions as input (unlike the scorers), we
                     # can optimize a bit and avoid repeating computing the
-                    # predictions of the previous trees. We'll re-use
+                    # predictions of the previous trees. We'll reuse
                     # raw_predictions (as it's needed for training anyway) for
                     # evaluating the training loss, and create
                     # raw_predictions_val for storing the raw predictions of
@@ -542,7 +645,6 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
         )
 
         for iteration in range(begin_at_stage, self.max_iter):
-
             if self.verbose:
                 iteration_start_time = time()
                 print(
@@ -592,7 +694,8 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
                     n_bins_non_missing=self._bin_mapper.n_bins_non_missing_,
                     has_missing_values=has_missing_values,
                     is_categorical=self.is_categorical_,
-                    monotonic_cst=self.monotonic_cst,
+                    monotonic_cst=monotonic_cst,
+                    interaction_cst=interaction_cst,
                     max_leaf_nodes=self.max_leaf_nodes,
                     max_depth=self.max_depth,
                     min_samples_leaf=self.min_samples_leaf,
@@ -606,7 +709,7 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
                 acc_find_split_time += grower.total_find_split_time
                 acc_compute_hist_time += grower.total_compute_hist_time
 
-                if self._loss.need_update_leaves_values:
+                if not self._loss.differentiable:
                     _update_leaves_values(
                         loss=self._loss,
                         grower=grower,
@@ -934,8 +1037,10 @@ class BaseHistGradientBoosting(BaseEstimator, ABC):
             The raw predicted values.
         """
         is_binned = getattr(self, "_in_fit", False)
-        dtype = X_BINNED_DTYPE if is_binned else X_DTYPE
-        X = self._validate_data(X, dtype=dtype, force_all_finite=False, reset=False)
+        if not is_binned:
+            X = self._validate_data(
+                X, dtype=X_DTYPE, force_all_finite=False, reset=False
+            )
         check_is_fitted(self)
         if X.shape[1] != self._n_features:
             raise ValueError(
@@ -1115,26 +1220,28 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
 
     Parameters
     ----------
-    loss : {'squared_error', 'absolute_error', 'poisson'}, \
+    loss : {'squared_error', 'absolute_error', 'gamma', 'poisson', 'quantile'}, \
             default='squared_error'
         The loss function to use in the boosting process. Note that the
-        "squared error" and "poisson" losses actually implement
-        "half least squares loss" and "half poisson deviance" to simplify the
-        computation of the gradient. Furthermore, "poisson" loss internally
-        uses a log-link and requires ``y >= 0``.
+        "squared error", "gamma" and "poisson" losses actually implement
+        "half least squares loss", "half gamma deviance" and "half poisson
+        deviance" to simplify the computation of the gradient. Furthermore,
+        "gamma" and "poisson" losses internally use a log-link, "gamma"
+        requires ``y > 0`` and "poisson" requires ``y >= 0``.
+        "quantile" uses the pinball loss.
 
         .. versionchanged:: 0.23
            Added option 'poisson'.
 
-        .. deprecated:: 1.0
-            The loss 'least_squares' was deprecated in v1.0 and will be removed
-            in version 1.2. Use `loss='squared_error'` which is equivalent.
+        .. versionchanged:: 1.1
+           Added option 'quantile'.
 
-        .. deprecated:: 1.0
-            The loss 'least_absolute_deviation' was deprecated in v1.0 and will
-            be removed in version 1.2. Use `loss='absolute_error'` which is
-            equivalent.
+        .. versionchanged:: 1.3
+           Added option 'gamma'.
 
+    quantile : float, default=None
+        If loss is "quantile", this parameter specifies which quantile to be estimated
+        and must be between 0 and 1.
     learning_rate : float, default=0.1
         The learning rate, also known as *shrinkage*. This is used as a
         multiplicative factor for the leaves values. Use ``1`` for no
@@ -1163,7 +1270,7 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
         Features with a small number of unique values may use less than
         ``max_bins`` bins. In addition to the ``max_bins`` bins, one more bin
         is always reserved for missing values. Must be no larger than 255.
-    categorical_features : array-like of {bool, int} of shape (n_features) \
+    categorical_features : array-like of {bool, int, str} of shape (n_features) \
             or shape (n_categorical_features,), default=None
         Indicates the categorical features.
 
@@ -1171,21 +1278,63 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
         - boolean array-like : boolean mask indicating categorical features.
         - integer array-like : integer indices indicating categorical
           features.
+        - str array-like: names of categorical features (assuming the training
+          data has feature names).
 
         For each categorical feature, there must be at most `max_bins` unique
-        categories, and each categorical value must be in [0, max_bins -1].
+        categories, and each categorical value must be less then `max_bins - 1`.
+        Negative values for categorical features are treated as missing values.
+        All categorical values are converted to floating point numbers.
+        This means that categorical values of 1.0 and 1 are treated as
+        the same category.
 
         Read more in the :ref:`User Guide <categorical_support_gbdt>`.
 
         .. versionadded:: 0.24
 
-    monotonic_cst : array-like of int of shape (n_features), default=None
-        Indicates the monotonic constraint to enforce on each feature. -1, 1
-        and 0 respectively correspond to a negative constraint, positive
-        constraint and no constraint. Read more in the :ref:`User Guide
-        <monotonic_cst_gbdt>`.
+        .. versionchanged:: 1.2
+           Added support for feature names.
+
+    monotonic_cst : array-like of int of shape (n_features) or dict, default=None
+        Monotonic constraint to enforce on each feature are specified using the
+        following integer values:
+
+        - 1: monotonic increase
+        - 0: no constraint
+        - -1: monotonic decrease
+
+        If a dict with str keys, map feature to monotonic constraints by name.
+        If an array, the features are mapped to constraints by position. See
+        :ref:`monotonic_cst_features_names` for a usage example.
+
+        The constraints are only valid for binary classifications and hold
+        over the probability of the positive class.
+        Read more in the :ref:`User Guide <monotonic_cst_gbdt>`.
 
         .. versionadded:: 0.23
+
+        .. versionchanged:: 1.2
+           Accept dict of constraints with feature names as keys.
+
+    interaction_cst : {"pairwise", "no_interactions"} or sequence of lists/tuples/sets \
+            of int, default=None
+        Specify interaction constraints, the sets of features which can
+        interact with each other in child node splits.
+
+        Each item specifies the set of feature indices that are allowed
+        to interact with each other. If there are more features than
+        specified in these constraints, they are treated as if they were
+        specified as an additional set.
+
+        The strings "pairwise" and "no_interactions" are shorthands for
+        allowing only pairwise or no interactions, respectively.
+
+        For instance, with 5 features in total, `interaction_cst=[{0, 1}]`
+        is equivalent to `interaction_cst=[{0, 1}, {2, 3, 4}]`,
+        and specifies that each branch of a tree will either only split
+        on features 0 and 1 or only split on features 2, 3 and 4.
+
+        .. versionadded:: 1.2
 
     warm_start : bool, default=False
         When set to ``True``, reuse the solution of the previous call to fit
@@ -1288,18 +1437,28 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
     0.92...
     """
 
-    _VALID_LOSSES = (
-        "squared_error",
-        "least_squares",
-        "absolute_error",
-        "least_absolute_deviation",
-        "poisson",
-    )
+    _parameter_constraints: dict = {
+        **BaseHistGradientBoosting._parameter_constraints,
+        "loss": [
+            StrOptions(
+                {
+                    "squared_error",
+                    "absolute_error",
+                    "poisson",
+                    "gamma",
+                    "quantile",
+                }
+            ),
+            BaseLoss,
+        ],
+        "quantile": [Interval(Real, 0, 1, closed="both"), None],
+    }
 
     def __init__(
         self,
         loss="squared_error",
         *,
+        quantile=None,
         learning_rate=0.1,
         max_iter=100,
         max_leaf_nodes=31,
@@ -1309,6 +1468,7 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
         max_bins=255,
         categorical_features=None,
         monotonic_cst=None,
+        interaction_cst=None,
         warm_start=False,
         early_stopping="auto",
         scoring="loss",
@@ -1328,6 +1488,7 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
             l2_regularization=l2_regularization,
             max_bins=max_bins,
             monotonic_cst=monotonic_cst,
+            interaction_cst=interaction_cst,
             categorical_features=categorical_features,
             early_stopping=early_stopping,
             warm_start=warm_start,
@@ -1338,6 +1499,7 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
             verbose=verbose,
             random_state=random_state,
         )
+        self.quantile = quantile
 
     def predict(self, X):
         """Predict values for X.
@@ -1382,7 +1544,11 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
         # Just convert y to the expected dtype
         self.n_trees_per_iteration_ = 1
         y = y.astype(Y_DTYPE, copy=False)
-        if self.loss == "poisson":
+        if self.loss == "gamma":
+            # Ensure y > 0
+            if not np.all(y > 0):
+                raise ValueError("loss='gamma' requires strictly positive y.")
+        elif self.loss == "poisson":
             # Ensure y >= 0 and sum(y) > 0
             if not (np.all(y >= 0) and np.sum(y) > 0):
                 raise ValueError(
@@ -1391,25 +1557,12 @@ class HistGradientBoostingRegressor(RegressorMixin, BaseHistGradientBoosting):
         return y
 
     def _get_loss(self, sample_weight):
-        # TODO: Remove in v1.2
-        if self.loss == "least_squares":
-            warnings.warn(
-                "The loss 'least_squares' was deprecated in v1.0 and will be "
-                "removed in version 1.2. Use 'squared_error' which is "
-                "equivalent.",
-                FutureWarning,
+        if self.loss == "quantile":
+            return _LOSSES[self.loss](
+                sample_weight=sample_weight, quantile=self.quantile
             )
-            return _LOSSES["squared_error"](sample_weight=sample_weight)
-        elif self.loss == "least_absolute_deviation":
-            warnings.warn(
-                "The loss 'least_absolute_deviation' was deprecated in v1.0 "
-                " and will be removed in version 1.2. Use 'absolute_error' "
-                "which is equivalent.",
-                FutureWarning,
-            )
-            return _LOSSES["absolute_error"](sample_weight=sample_weight)
-
-        return _LOSSES[self.loss](sample_weight=sample_weight)
+        else:
+            return _LOSSES[self.loss](sample_weight=sample_weight)
 
 
 class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
@@ -1436,13 +1589,19 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
 
     Parameters
     ----------
-    loss : {'auto', 'binary_crossentropy', 'categorical_crossentropy'}, \
-            default='auto'
-        The loss function to use in the boosting process. 'binary_crossentropy'
-        (also known as logistic loss) is used for binary classification and
-        generalizes to 'categorical_crossentropy' for multiclass
-        classification. 'auto' will automatically choose either loss depending
-        on the nature of the problem.
+    loss : {'log_loss'}, default='log_loss'
+        The loss function to use in the boosting process.
+
+        For binary classification problems, 'log_loss' is also known as logistic loss,
+        binomial deviance or binary crossentropy. Internally, the model fits one tree
+        per boosting iteration and uses the logistic sigmoid function (expit) as
+        inverse link function to compute the predicted positive class probability.
+
+        For multiclass classification problems, 'log_loss' is also known as multinomial
+        deviance or categorical crossentropy. Internally, the model fits one tree per
+        boosting iteration and per class and uses the softmax function as inverse link
+        function to compute the predicted probabilities of the classes.
+
     learning_rate : float, default=0.1
         The learning rate, also known as *shrinkage*. This is used as a
         multiplicative factor for the leaves values. Use ``1`` for no
@@ -1471,7 +1630,7 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         Features with a small number of unique values may use less than
         ``max_bins`` bins. In addition to the ``max_bins`` bins, one more bin
         is always reserved for missing values. Must be no larger than 255.
-    categorical_features : array-like of {bool, int} of shape (n_features) \
+    categorical_features : array-like of {bool, int, str} of shape (n_features) \
             or shape (n_categorical_features,), default=None
         Indicates the categorical features.
 
@@ -1479,21 +1638,63 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         - boolean array-like : boolean mask indicating categorical features.
         - integer array-like : integer indices indicating categorical
           features.
+        - str array-like: names of categorical features (assuming the training
+          data has feature names).
 
         For each categorical feature, there must be at most `max_bins` unique
-        categories, and each categorical value must be in [0, max_bins -1].
+        categories, and each categorical value must be less then `max_bins - 1`.
+        Negative values for categorical features are treated as missing values.
+        All categorical values are converted to floating point numbers.
+        This means that categorical values of 1.0 and 1 are treated as
+        the same category.
 
         Read more in the :ref:`User Guide <categorical_support_gbdt>`.
 
         .. versionadded:: 0.24
 
-    monotonic_cst : array-like of int of shape (n_features), default=None
-        Indicates the monotonic constraint to enforce on each feature. -1, 1
-        and 0 respectively correspond to a negative constraint, positive
-        constraint and no constraint. Read more in the :ref:`User Guide
-        <monotonic_cst_gbdt>`.
+        .. versionchanged:: 1.2
+           Added support for feature names.
+
+    monotonic_cst : array-like of int of shape (n_features) or dict, default=None
+        Monotonic constraint to enforce on each feature are specified using the
+        following integer values:
+
+        - 1: monotonic increase
+        - 0: no constraint
+        - -1: monotonic decrease
+
+        If a dict with str keys, map feature to monotonic constraints by name.
+        If an array, the features are mapped to constraints by position. See
+        :ref:`monotonic_cst_features_names` for a usage example.
+
+        The constraints are only valid for binary classifications and hold
+        over the probability of the positive class.
+        Read more in the :ref:`User Guide <monotonic_cst_gbdt>`.
 
         .. versionadded:: 0.23
+
+        .. versionchanged:: 1.2
+           Accept dict of constraints with feature names as keys.
+
+    interaction_cst : {"pairwise", "no_interactions"} or sequence of lists/tuples/sets \
+            of int, default=None
+        Specify interaction constraints, the sets of features which can
+        interact with each other in child node splits.
+
+        Each item specifies the set of feature indices that are allowed
+        to interact with each other. If there are more features than
+        specified in these constraints, they are treated as if they were
+        specified as an additional set.
+
+        The strings "pairwise" and "no_interactions" are shorthands for
+        allowing only pairwise or no interactions, respectively.
+
+        For instance, with 5 features in total, `interaction_cst=[{0, 1}]`
+        is equivalent to `interaction_cst=[{0, 1}, {2, 3, 4}]`,
+        and specifies that each branch of a tree will either only split
+        on features 0 and 1 or only split on features 2, 3 and 4.
+
+        .. versionadded:: 1.2
 
     warm_start : bool, default=False
         When set to ``True``, reuse the solution of the previous call to fit
@@ -1536,6 +1737,16 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         is enabled.
         Pass an int for reproducible output across multiple function calls.
         See :term:`Glossary <random_state>`.
+    class_weight : dict or 'balanced', default=None
+        Weights associated with classes in the form `{class_label: weight}`.
+        If not given, all classes are supposed to have weight one.
+        The "balanced" mode uses the values of y to automatically adjust
+        weights inversely proportional to class frequencies in the input data
+        as `n_samples / (n_classes * np.bincount(y))`.
+        Note that these weights will be multiplied with sample_weight (passed
+        through the fit method) if `sample_weight` is specified.
+
+        .. versionadded:: 1.2
 
     Attributes
     ----------
@@ -1598,11 +1809,15 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
     1.0
     """
 
-    _VALID_LOSSES = ("binary_crossentropy", "categorical_crossentropy", "auto")
+    _parameter_constraints: dict = {
+        **BaseHistGradientBoosting._parameter_constraints,
+        "loss": [StrOptions({"log_loss"}), BaseLoss],
+        "class_weight": [dict, StrOptions({"balanced"}), None],
+    }
 
     def __init__(
         self,
-        loss="auto",
+        loss="log_loss",
         *,
         learning_rate=0.1,
         max_iter=100,
@@ -1613,6 +1828,7 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         max_bins=255,
         categorical_features=None,
         monotonic_cst=None,
+        interaction_cst=None,
         warm_start=False,
         early_stopping="auto",
         scoring="loss",
@@ -1621,6 +1837,7 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         tol=1e-7,
         verbose=0,
         random_state=None,
+        class_weight=None,
     ):
         super(HistGradientBoostingClassifier, self).__init__(
             loss=loss,
@@ -1633,6 +1850,7 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
             max_bins=max_bins,
             categorical_features=categorical_features,
             monotonic_cst=monotonic_cst,
+            interaction_cst=interaction_cst,
             warm_start=warm_start,
             early_stopping=early_stopping,
             scoring=scoring,
@@ -1642,6 +1860,19 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
             verbose=verbose,
             random_state=random_state,
         )
+        self.class_weight = class_weight
+
+    def _finalize_sample_weight(self, sample_weight, y):
+        """Adjust sample_weights with class_weights."""
+        if self.class_weight is None:
+            return sample_weight
+
+        expanded_class_weight = compute_sample_weight(self.class_weight, y)
+
+        if sample_weight is not None:
+            return sample_weight * expanded_class_weight
+        else:
+            return expanded_class_weight
 
     def predict(self, X):
         """Predict classes for X.
@@ -1779,33 +2010,10 @@ class HistGradientBoostingClassifier(ClassifierMixin, BaseHistGradientBoosting):
         return encoded_y
 
     def _get_loss(self, sample_weight):
-        if self.loss == "auto":
-            if self.n_trees_per_iteration_ == 1:
-                return _LOSSES["binary_crossentropy"](sample_weight=sample_weight)
-            else:
-                return _LOSSES["categorical_crossentropy"](
-                    sample_weight=sample_weight,
-                    n_classes=self.n_trees_per_iteration_,
-                )
-
-        if self.loss == "categorical_crossentropy":
-            if self.n_trees_per_iteration_ == 1:
-                raise ValueError(
-                    "loss='categorical_crossentropy' is not suitable for "
-                    "a binary classification problem. Please use "
-                    "loss='auto' or loss='binary_crossentropy' instead."
-                )
-            else:
-                return _LOSSES[self.loss](
-                    sample_weight=sample_weight, n_classes=self.n_trees_per_iteration_
-                )
+        # At this point self.loss == "log_loss"
+        if self.n_trees_per_iteration_ == 1:
+            return HalfBinomialLoss(sample_weight=sample_weight)
         else:
-            if self.n_trees_per_iteration_ > 1:
-                raise ValueError(
-                    "loss='binary_crossentropy' is not defined for multiclass"
-                    " classification with n_classes="
-                    f"{self.n_trees_per_iteration_}, use loss="
-                    "'categorical_crossentropy' instead."
-                )
-            else:
-                return _LOSSES[self.loss](sample_weight=sample_weight)
+            return HalfMultinomialLoss(
+                sample_weight=sample_weight, n_classes=self.n_trees_per_iteration_
+            )
