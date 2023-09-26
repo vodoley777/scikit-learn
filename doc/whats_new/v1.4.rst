@@ -225,6 +225,15 @@ Changelog
   deprecated and will be removed in 1.6. :pr:`26830` by :user:`Stefanie Senger
   <StefanieSenger>`.
 
+:mod:`sklearn.gaussian_process`
+...............................
+
+- |Enhancement| The methods `predict` and `predict_proba` of
+  :class:`gaussian_process.GaussianProcessClassifier` now expose
+  the standard deviation of the latent function f with a
+  `return_std_of_f` flag. :pr:`22227` by
+  :user:`Miguel González Duque <miguelgondu>`
+
 :mod:`sklearn.linear_model`
 ...........................
 
