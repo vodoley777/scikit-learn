@@ -227,7 +227,7 @@ def test_reconstruct_patches_perfect_color(orange_face):
 def test_reconstruct_patches_perfect_strided(downsampled_face):
     face = downsampled_face
     p_h, p_w = 16, 16
-    stride = 8
+    stride = (8, 4)
 
     patches = extract_patches_2d(face, (p_h, p_w), stride=stride)
     face_reconstructed = reconstruct_from_patches_2d(patches, face.shape, stride=stride)
@@ -237,7 +237,7 @@ def test_reconstruct_patches_perfect_strided(downsampled_face):
 def test_reconstruct_patches_perfect_color_strided(orange_face):
     face = orange_face
     p_h, p_w = 16, 16
-    stride = 4
+    stride = 16
 
     patches = extract_patches_2d(face, (p_h, p_w), stride=stride)
     face_reconstructed = reconstruct_from_patches_2d(patches, face.shape, stride=stride)
@@ -297,6 +297,19 @@ def test_patch_extractor_color(orange_face):
     p_h, p_w = 8, 8
     expected_n_patches = len(faces) * (i_h - p_h + 1) * (i_w - p_w + 1)
     extr = PatchExtractor(patch_size=(p_h, p_w), random_state=0)
+    patches = extr.transform(faces)
+    assert patches.shape == (expected_n_patches, p_h, p_w, 3)
+
+
+def test_patch_extractor_color_strided(orange_face):
+    faces = _make_images(orange_face)
+    i_h, i_w = faces.shape[1:3]
+    p_h, p_w = 8, 6
+    s_h, s_w = 4, 2
+    expected_n_patches = (
+        len(faces) * ((i_h - p_h) // s_h + 1) * ((i_w - p_w) // s_w + 1)
+    )
+    extr = PatchExtractor(patch_size=(p_h, p_w), random_state=0, stride=(s_h, s_w))
     patches = extr.transform(faces)
     assert patches.shape == (expected_n_patches, p_h, p_w, 3)
 

@@ -332,7 +332,7 @@ Changelog
 :mod:`sklearn.feature_extraction`
 .................................
 
-- |Enhancement| A parameter `strade` is added to
+- |Enhancement| A parameter `stride` is added to
   :class:`feature_extraction.image.extract_patches_2d` and
   :class:`feature_extraction.image.reconstruct_from_patches_2d` to control the stride
   when extracting patches from an image.
