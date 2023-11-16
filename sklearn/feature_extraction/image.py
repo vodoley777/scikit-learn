@@ -11,14 +11,14 @@ extract features from images.
 
 from itertools import product
 from numbers import Integral, Number, Real
-import numpy as np
-from scipy import sparse
-from numpy.lib.stride_tricks import as_strided
 
-from ..base import BaseEstimator, TransformerMixin
+import numpy as np
+from numpy.lib.stride_tricks import as_strided
+from scipy import sparse
+
+from ..base import BaseEstimator, TransformerMixin, _fit_context
 from ..utils import check_array, check_random_state
-from ..utils._param_validation import Hidden, Interval, validate_params
-from ..utils._param_validation import RealNotInt
+from ..utils._param_validation import Hidden, Interval, RealNotInt, validate_params
 
 __all__ = [
     "PatchExtractor",
@@ -76,7 +76,7 @@ def _mask_edges_weights(mask, edges, weights=None):
     """Apply a mask to edges (weighted or not)"""
     inds = np.arange(mask.size)
     inds = inds[mask.ravel()]
-    ind_mask = np.logical_and(np.in1d(edges[0], inds), np.in1d(edges[1], inds))
+    ind_mask = np.logical_and(np.isin(edges[0], inds), np.isin(edges[1], inds))
     edges = edges[:, ind_mask]
     if weights is not None:
         weights = weights[ind_mask]
@@ -145,7 +145,8 @@ def _to_graph(
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
     """Graph of the pixel-to-pixel gradient connections.
@@ -196,7 +197,8 @@ def img_to_graph(img, *, mask=None, return_as=sparse.coo_matrix, dtype=None):
         "mask": [None, np.ndarray],
         "return_as": [type],
         "dtype": "no_validation",  # validation delegated to numpy
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def grid_to_graph(
     n_x, n_y, n_z=1, *, mask=None, return_as=sparse.coo_matrix, dtype=int
@@ -259,10 +261,10 @@ def _compute_n_patches(i_h, i_w, p_h, p_w, max_patches=None, stride=(1, 1)):
     p_w : int
         The width of a patch
     max_patches : int or float, default=None
-        The maximum number of patches to extract. If max_patches is a float
+        The maximum number of patches to extract. If `max_patches` is a float
         between 0 and 1, it is taken to be a proportion of the total number
-        of patches.
-    stride : tuple of length arr.ndim, default=(1, 1)
+        of patches. If `max_patches` is None, all possible patches are extracted.
+    stride : tuple of int, default=(1, 1)
         Indicates stride at which extraction shall be performed.
     """
     n_h = (i_h - p_h) // stride[0] + 1
@@ -352,7 +354,8 @@ def _extract_patches(arr, patch_shape=8, extraction_step=1):
         ],
         "random_state": ["random_state"],
         "stride": [tuple, Integral],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def extract_patches_2d(
     image, patch_size, *, max_patches=None, random_state=None, stride=1
@@ -385,9 +388,11 @@ def extract_patches_2d(
         deterministic.
         See :term:`Glossary <random_state>`.
 
-    stride : int or tuple of length arr.ndim, default=1
-        Indicates stride at which extraction shall be performed.
-        If integer is given, then the stride is uniform in all dimensions.
+    stride : int or tuple of int, default=1
+        Indicates the stride at which extraction shall be performed.
+        If an integer is given, then the stride is uniform in both image dimension.
+
+        .. versionadded:: 1.4
 
     Returns
     -------
@@ -437,7 +442,7 @@ def extract_patches_2d(
     image = image.reshape((i_h, i_w, -1))
     n_colors = image.shape[-1]
 
-    if isinstance(stride, Number):
+    if isinstance(stride, Integral):
         stride = tuple([stride] * image.ndim)
 
     extracted_patches = _extract_patches(
@@ -466,7 +471,8 @@ def extract_patches_2d(
         "patches": [np.ndarray],
         "image_size": [tuple, Hidden(list)],
         "stride": [tuple, Integral],
-    }
+    },
+    prefer_skip_nested_validation=True,
 )
 def reconstruct_from_patches_2d(patches, image_size, stride=1):
     """Reconstruct the image from all of its patches.
@@ -489,9 +495,11 @@ def reconstruct_from_patches_2d(patches, image_size, stride=1):
         (image_height, image_width, n_channels)
         The size of the image that will be reconstructed.
 
-    stride : int or tuple of length arr.ndim, default=1
-        Indicates stride at which extraction shall be performed.
-        If integer is given, then the stride is uniform in all dimensions.
+    stride : int or tuple of int, default=1
+        Indicates the stride at which extraction shall be performed.
+        If an integer is given, then the stride is uniform in both image dimension.
+
+        .. versionadded:: 1.4
 
     Returns
     -------
@@ -586,6 +594,7 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         self.max_patches = max_patches
         self.random_state = random_state
 
+    @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None):
         """Only validate the parameters of the estimator.
 
@@ -608,7 +617,6 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         self : object
             Returns the instance itself.
         """
-        self._validate_params()
         return self
 
     def transform(self, X):
