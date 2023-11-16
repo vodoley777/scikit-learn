@@ -552,6 +552,12 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         deterministic.
         See :term:`Glossary <random_state>`.
 
+    stride : int or tuple of int, default=1
+        Indicates the stride at which extraction shall be performed.
+        If an integer is given, then the stride is uniform in both image dimension.
+
+        .. versionadded:: 1.4
+
     See Also
     --------
     reconstruct_from_patches_2d : Reconstruct image from all of its patches.
@@ -588,12 +594,16 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
             Interval(Integral, 1, None, closed="left"),
         ],
         "random_state": ["random_state"],
+        "stride": [tuple, Integral],
     }
 
-    def __init__(self, *, patch_size=None, max_patches=None, random_state=None):
+    def __init__(
+        self, *, patch_size=None, max_patches=None, random_state=None, stride=1
+    ):
         self.patch_size = patch_size
         self.max_patches = max_patches
         self.random_state = random_state
+        self.stride = stride
 
     @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y=None):
@@ -659,6 +669,14 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
                 )
             patch_size = self.patch_size
 
+        stride = self.stride
+        if isinstance(stride, Integral):
+            stride = tuple([stride] * (X.ndim - 1))
+        elif len(stride) != X.ndim - 1:
+            # We extended the 2D image into a 3D image.
+            # We can fix the stride to 1 for the third dimension.
+            stride = stride + (1,)
+
         n_imgs, img_height, img_width = X.shape[:3]
         X = np.reshape(X, (n_imgs, img_height, img_width, -1))
         n_channels = X.shape[-1]
@@ -666,7 +684,7 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
         # compute the dimensions of the patches array
         patch_height, patch_width = patch_size
         n_patches = _compute_n_patches(
-            img_height, img_width, patch_height, patch_width, self.max_patches
+            img_height, img_width, patch_height, patch_width, self.max_patches, stride
         )
         patches_shape = (n_imgs * n_patches,) + patch_size
         if n_channels > 1:
@@ -680,6 +698,7 @@ class PatchExtractor(TransformerMixin, BaseEstimator):
                 patch_size,
                 max_patches=self.max_patches,
                 random_state=random_state,
+                stride=stride,
             )
         return patches
 

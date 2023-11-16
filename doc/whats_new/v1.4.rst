@@ -329,6 +329,15 @@ Changelog
   which allows to retrieve the training sample indices used for each tree estimator.
   :pr:`26736` by :user:`Adam Li <adam2392>`.
 
+:mod:`sklearn.feature_extraction`
+.................................
+
+- |Enhancement| A parameter `stride` is added to
+  :class:`feature_extraction.image.extract_patches_2d` and
+  :class:`feature_extraction.image.reconstruct_from_patches_2d` to control the stride
+  when extracting patches from an image.
+  :pr:`26353` by :user:`Victor Martin <REDVM>`.
+
 :mod:`sklearn.feature_selection`
 ................................
 
