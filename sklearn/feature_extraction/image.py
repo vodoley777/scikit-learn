@@ -442,6 +442,10 @@ def extract_patches_2d(
 
     if isinstance(stride, Number):
         stride = tuple([stride] * image.ndim)
+    elif len(stride) != image.ndim:
+        # We extended the 2D image into a 3D image.
+        # We can fix the stride to 1 for the third dimension.
+        stride = stride + (1,)
 
     extracted_patches = _extract_patches(
         image, patch_shape=(p_h, p_w, n_colors), extraction_step=stride
