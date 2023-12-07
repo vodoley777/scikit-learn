@@ -547,6 +547,13 @@ Changelog
   :func:`metrics.root_mean_squared_log_error` instead.
   :pr:`26734` by :user:`Alejandro Martin Gil <101AlexMartin>`.
 
+- |API| :func:`~metrics.pairwise.paired_distances`,
+  :func:`~metrics.pairwise.paired_euclidean_distances`,
+  :func:`~metrics.pairwise.paired_manhattan_distances` and
+  :func:`~metrics.pairwise.paired_cosine_distances` are now deprecated and
+  will be removed in 1.6.
+  :pr:`27129` by :user:`Shreesha Kumar Bhat <Shreesha3112>`.
+
 - |Fix| :func:`metrics.make_scorer` now raises an error when using a regressor on a
   scorer requesting a non-thresholded decision function (from `decision_function` or
   `predict_proba`). Such scorer are specific to classification.
