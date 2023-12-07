@@ -392,7 +392,16 @@ def type_of_target(y, input_name=""):
     # Check multiclass
     if issparse(first_row):
         first_row = first_row.data
-    if xp.unique_values(y).shape[0] > 2 or (y.ndim == 2 and len(first_row) > 1):
+    classes = xp.unique_values(y)
+    if y.shape[0] > 20 and classes.shape[0] > round(0.5 * y.shape[0]):
+        # Only raise the warning when we have at least 20 samples.
+        warnings.warn(
+            r"The number of unique classes is greater than 50% of the number "
+            r"of samples.",
+            UserWarning,
+            stacklevel=2,
+        )
+    if classes.shape[0] > 2 or (y.ndim == 2 and len(first_row) > 1):
         # [1, 2, 3] or [[1., 2., 3]] or [[1, 2]]
         return "multiclass" + suffix
     else:
