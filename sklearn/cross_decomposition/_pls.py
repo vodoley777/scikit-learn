@@ -27,8 +27,7 @@ from ..utils.extmath import svd_flip
 from ..utils.fixes import parse_version, sp_version
 from ..utils.validation import FLOAT_DTYPES, check_is_fitted
 
-__all__ = ["PLSCanonical", "PLSRegression", "PLSSVD"]
-
+__all__ = ["PLSCanonical", "PLSRegression", "PLSSVD", "RidgeCCA"]
 
 if sp_version >= parse_version("1.7"):
     # Starting in scipy 1.7 pinv2 was deprecated in favor of pinv.
@@ -123,6 +122,68 @@ def _get_first_singular_vectors_svd(X, Y):
     C = np.dot(X.T, Y)
     U, _, Vt = svd(C, full_matrices=False)
     return U[:, 0], Vt[0, :]
+
+
+def _get_first_singular_vectors_ridge(X, Y, alpha_x=0.0, alpha_y=0.0):
+    """Return the first left and right singular vectors of X'Y in principal components
+    space.
+
+    This function performs the inverse Cholesky decomposition of the covariance
+    matrices of the principal components and returns the singular vectors in the data
+    space.
+    """
+    if X.shape[0] <= X.shape[1] or Y.shape[0] <= Y.shape[1]:
+        # do PCA implementation
+        # Step 1: Compute the principal components of X and Y
+        Ux, Sx, Vxt = svd(X, full_matrices=False)
+        Uy, Sy, Vyt = svd(Y, full_matrices=False)
+
+        Rx = Ux @ np.diag(Sx)
+        Ry = Uy @ np.diag(Sy)
+
+        # Ensure Rx and Ry are not near-singular
+        if np.isclose(np.linalg.cond(Rx), np.inf) or np.isclose(
+            np.linalg.cond(Ry), np.inf
+        ):
+            raise ValueError("Rx or Ry is near-singular.")
+
+        Bx = np.linalg.pinv(
+            np.linalg.cholesky(Rx.T @ Rx + alpha_x * np.eye(Rx.shape[1]))
+        )
+        By = np.linalg.pinv(
+            np.linalg.cholesky(Ry.T @ Ry + alpha_y * np.eye(Ry.shape[1]))
+        )
+
+        # Step 3: Compute the singular value decomposition of the transformed matrices
+        C = np.dot(Bx @ Rx.T, Ry @ By)
+        U, _, Vt = svd(C, full_matrices=False)
+
+        # Step 4: Return the first left and right singular vectors in the data space
+        x_weights = Vxt.T @ Bx.T @ U[:, 0]
+        y_weights = Vyt.T @ By.T @ Vt[0, :]
+
+        # Step 5: Normalize the singular vectors
+        x_weights /= np.sqrt(np.dot(x_weights, x_weights))
+        y_weights /= np.sqrt(np.dot(y_weights, y_weights))
+    else:
+        Cx = np.cov(X.T)
+        Cy = np.cov(Y.T)
+        Bx = np.linalg.inv(np.linalg.cholesky(Cx + alpha_x * np.eye(Cx.shape[1])))
+        By = np.linalg.inv(np.linalg.cholesky(Cy + alpha_y * np.eye(Cx.shape[1])))
+
+        # Step 3: Compute the singular value decomposition of the transformed matrices
+        C = Bx @ X.T @ Y @ By.T
+        U, _, Vt = svd(C, full_matrices=False)
+
+        # Step 4: Return the first left and right singular vectors in the data space
+        x_weights = Bx.T @ U[:, 0].T
+        y_weights = By.T @ Vt[0, :]
+
+    # Step 5: Normalize the singular vectors
+    x_weights /= np.sqrt(np.dot(x_weights, x_weights))
+    y_weights /= np.sqrt(np.dot(y_weights, y_weights))
+
+    return x_weights, y_weights
 
 
 def _center_scale_xy(X, Y, scale=True):
@@ -309,7 +370,10 @@ class _PLS(
 
             elif self.algorithm == "svd":
                 x_weights, y_weights = _get_first_singular_vectors_svd(Xk, Yk)
-
+            elif self.algorithm == "ridge":
+                x_weights, y_weights = _get_first_singular_vectors_ridge(
+                    Xk, Yk, alpha_x=self.alpha_x, alpha_y=self.alpha_x
+                )
             # inplace sign flip for consistency across solvers and archs
             _svd_flip_1d(x_weights, y_weights)
 
@@ -1069,3 +1133,101 @@ class PLSSVD(ClassNamePrefixFeaturesOutMixin, TransformerMixin, BaseEstimator):
             `(X_transformed, Y_transformed)` otherwise.
         """
         return self.fit(X, y).transform(X, y)
+
+
+class RidgeCCA(_PLS):
+    """Partial Least Square SVD.
+
+    This transformer simply performs a SVD on the cross-covariance matrix
+    `X'Y`. It is able to project both the training data `X` and the targets
+    `Y`. The training data `X` is projected on the left singular vectors, while
+    the targets are projected on the right singular vectors.
+
+    Read more in the :ref:`User Guide <cross_decomposition>`.
+
+    .. versionadded:: 0.8
+
+    Parameters
+    ----------
+    n_components : int, default=2
+        The number of components to keep. Should be in `[1,
+        min(n_samples, n_features, n_targets)]`.
+
+    scale : bool, default=True
+        Whether to scale `X` and `Y`.
+
+    copy : bool, default=True
+        Whether to copy `X` and `Y` in fit before applying centering, and
+        potentially scaling. If `False`, these operations will be done inplace,
+        modifying both arrays.
+
+    Attributes
+    ----------
+    x_weights_ : ndarray of shape (n_features, n_components)
+        The left singular vectors of the SVD of the cross-covariance matrix.
+        Used to project `X` in :meth:`transform`.
+
+    y_weights_ : ndarray of (n_targets, n_components)
+        The right singular vectors of the SVD of the cross-covariance matrix.
+        Used to project `X` in :meth:`transform`.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : ndarray of shape (`n_features_in_`,)
+        Names of features seen during :term:`fit`. Defined only when `X`
+        has feature names that are all strings.
+
+        .. versionadded:: 1.0
+
+    See Also
+    --------
+    PLSCanonical : Partial Least Squares transformer and regressor.
+    CCA : Canonical Correlation Analysis.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.cross_decomposition import PLSSVD
+    >>> X = np.array([[0., 0., 1.],
+    ...               [1., 0., 0.],
+    ...               [2., 2., 2.],
+    ...               [2., 5., 4.]])
+    >>> Y = np.array([[0.1, -0.2],
+    ...               [0.9, 1.1],
+    ...               [6.2, 5.9],
+    ...               [11.9, 12.3]])
+    >>> pls = RidgeCCA(n_components=2, alpha_x=0.5,alpha_y=0.5).fit(X, Y)
+    >>> X_c, Y_c = pls.transform(X, Y)
+    >>> X_c.shape, Y_c.shape
+    ((4, 2), (4, 2))
+    """
+
+    _parameter_constraints: dict = {
+        "n_components": [Interval(Integral, 1, None, closed="left")],
+        "scale": ["boolean"],
+        "copy": ["boolean"],
+    }
+
+    def __init__(
+        self,
+        n_components=2,
+        *,
+        scale=True,
+        max_iter=500,
+        tol=1e-06,
+        copy=True,
+        alpha_x=0.0,
+        alpha_y=0.0,
+    ):
+        super().__init__(
+            n_components=n_components,
+            scale=scale,
+            deflation_mode="canonical",
+            algorithm="ridge",
+            max_iter=max_iter,
+            tol=tol,
+            copy=copy,
+        )
+        self.alpha_x = alpha_x
+        self.alpha_y = alpha_y
