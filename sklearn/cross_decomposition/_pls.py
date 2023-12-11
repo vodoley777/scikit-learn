@@ -11,6 +11,7 @@ from numbers import Integral, Real
 
 import numpy as np
 from scipy.linalg import svd
+from scipy.optimize import minimize
 
 from ..base import (
     BaseEstimator,
@@ -27,8 +28,7 @@ from ..utils.extmath import svd_flip
 from ..utils.fixes import parse_version, sp_version
 from ..utils.validation import FLOAT_DTYPES, check_is_fitted
 
-__all__ = ["PLSCanonical", "PLSRegression", "PLSSVD"]
-
+__all__ = ["PLSCanonical", "PLSRegression", "PLSSVD", "CCA", "SPLS"]
 
 if sp_version >= parse_version("1.7"):
     # Starting in scipy 1.7 pinv2 was deprecated in favor of pinv.
@@ -125,6 +125,40 @@ def _get_first_singular_vectors_svd(X, Y):
     return U[:, 0], Vt[0, :]
 
 
+def _get_first_singular_vectors_pmd(
+    X, Y, max_iter=500, tol=1e-06, tau_x=1.0, tau_y=1.0
+):
+    eps = np.finfo(X.dtype).eps
+    try:
+        y_score = next(col for col in Y.T if np.any(np.abs(col) > eps))
+    except StopIteration as e:
+        raise StopIteration("Y residual is constant") from e
+
+    x_weights_old = 100  # init to big value for first convergence check
+
+    for i in range(max_iter):
+        x_weights = np.dot(X.T, y_score) / (np.dot(y_score, y_score) + eps)
+        x_weights = _soft_threshold(x_weights, tau_x, tol=tol, eps=eps)
+        x_score = np.dot(X, x_weights)
+
+        y_weights = np.dot(Y.T, x_score) / (np.dot(x_score.T, x_score) + eps)
+
+        y_weights = _soft_threshold(y_weights, tau_y, tol=tol, eps=eps)
+
+        y_score = np.dot(Y, y_weights) / (np.dot(y_weights, y_weights) + eps)
+
+        x_weights_diff = x_weights - x_weights_old
+        if np.dot(x_weights_diff, x_weights_diff) < tol or Y.shape[1] == 1:
+            break
+        x_weights_old = x_weights
+
+    n_iter = i + 1
+    if n_iter == max_iter:
+        warnings.warn("Maximum number of iterations reached", ConvergenceWarning)
+
+    return x_weights, y_weights, n_iter
+
+
 def _center_scale_xy(X, Y, scale=True):
     """Center X, Y and scale if the scale parameter==True
 
@@ -183,7 +217,7 @@ class _PLS(
         "scale": ["boolean"],
         "deflation_mode": [StrOptions({"regression", "canonical"})],
         "mode": [StrOptions({"A", "B"})],
-        "algorithm": [StrOptions({"svd", "nipals"})],
+        "algorithm": [StrOptions({"svd", "nipals", "pmd"})],
         "max_iter": [Interval(Integral, 1, None, closed="left")],
         "tol": [Interval(Real, 0, None, closed="left")],
         "copy": ["boolean"],
@@ -310,6 +344,27 @@ class _PLS(
             elif self.algorithm == "svd":
                 x_weights, y_weights = _get_first_singular_vectors_svd(Xk, Yk)
 
+            elif self.algorithm == "pmd":
+                # Replace columns that are all close to zero with zeros
+                Yk_mask = np.all(np.abs(Yk) < 10 * Y_eps, axis=0)
+                Yk[:, Yk_mask] = 0.0
+                try:
+                    x_weights, y_weights, n_iter_ = _get_first_singular_vectors_pmd(
+                        Xk,
+                        Yk,
+                        max_iter=self.max_iter,
+                        tol=self.tol,
+                        tau_x=self.penalty_x * np.sqrt(Xk.shape[1]),
+                        tau_y=self.penalty_y * np.sqrt(Yk.shape[1]),
+                    )
+                except StopIteration as e:
+                    if str(e) != "Y residual is constant":
+                        raise
+                    warnings.warn(f"Y residual is constant at iteration {k}")
+                    break
+
+                self.n_iter_.append(n_iter_)
+
             # inplace sign flip for consistency across solvers and archs
             _svd_flip_1d(x_weights, y_weights)
 
@@ -322,12 +377,15 @@ class _PLS(
             y_scores = np.dot(Yk, y_weights) / y_ss
 
             # Deflation: subtract rank-one approx to obtain Xk+1 and Yk+1
-            x_loadings = np.dot(x_scores, Xk) / np.dot(x_scores, x_scores)
+            x_loadings = np.dot(x_scores, Xk) / max(
+                np.dot(x_scores, x_scores), self.tol
+            )  # ensures that the denominator is not zero
             Xk -= np.outer(x_scores, x_loadings)
-
             if self.deflation_mode == "canonical":
                 # regress Yk on y_score
-                y_loadings = np.dot(y_scores, Yk) / np.dot(y_scores, y_scores)
+                y_loadings = np.dot(y_scores, Yk) / max(
+                    np.dot(y_scores, y_scores), self.tol
+                )  # ensures that the denominator is not zero
                 Yk -= np.outer(y_scores, y_loadings)
             if self.deflation_mode == "regression":
                 # regress Yk on x_score
@@ -1069,3 +1127,184 @@ class PLSSVD(ClassNamePrefixFeaturesOutMixin, TransformerMixin, BaseEstimator):
             `(X_transformed, Y_transformed)` otherwise.
         """
         return self.fit(X, y).transform(X, y)
+
+
+class SPLS(PLSCanonical):
+    """Sparse Partial Least Squares.
+
+    This transformer performs a Sparse Partial Least Squares [2] on the cross-
+    covariance matrix `X'Y` using Penalized Matrix Decomposition [1].
+    It is able to project both the training data `X`and the targets `Y`.
+    The training data `X` is projected on the left singular vectors,
+    while the targets are projected on the right singular
+    vectors.
+
+    Read more in the :ref:`User Guide <cross_decomposition>`.
+
+    Parameters
+    ----------
+    n_components : int, default=1
+        Number of components to keep. Should be in `[1, min(n_samples,
+        n_features, n_targets)]`.
+
+    scale : bool, default=True
+        Whether to scale `X` and `Y`.
+
+    max_iter : int, default=500
+        The maximum number of iterations of the power method when
+        `algorithm='nipals'`. Ignored otherwise.
+
+    tol : float, default=1e-06
+        The tolerance used as convergence criteria in the power method: the
+        algorithm stops whenever the squared norm of `u_i - u_{i-1}` is less
+        than `tol`, where `u` corresponds to the left singular vector.
+
+    copy : bool, default=True
+        Whether to copy `X` and `Y` in fit before applying centering, and
+        potentially scaling. If False, these operations will be done inplace,
+        modifying both arrays.
+
+    penalty_x : float, default=0.5
+        The penalty parameter for the training data `X`. It controls the
+        sparsity level of the left singular vectors. `penalty_x` is used to
+        calculate `tau_x` as `penalty_x * sqrt(X.shape[1])`, which constrains
+        `tau_x` to be between 0 and 1.
+
+    penalty_y : float, default=0.5
+        The penalty parameter for the targets `Y`. It controls the sparsity
+        level of the right singular vectors. `penalty_y` is used to calculate
+        `tau_y` as `penalty_y * sqrt(Y.shape[1])`, which constrains `tau_y`
+        to be between 0 and 1.
+
+    Attributes
+    ----------
+    x_weights_ : ndarray of shape (n_features, n_components)
+        The left singular vectors of the cross-covariance matrices of each
+        iteration.
+
+    y_weights_ : ndarray of shape (n_targets, n_components)
+        The right singular vectors of the cross-covariance matrices of each
+        iteration.
+
+    x_loadings_ : ndarray of shape (n_features, n_components)
+        The loadings of `X`.
+
+    y_loadings_ : ndarray of shape (n_targets, n_components)
+        The loadings of `Y`.
+
+    x_rotations_ : ndarray of shape (n_features, n_components)
+        The projection matrix used to transform `X`.
+
+    y_rotations_ : ndarray of shape (n_features, n_components)
+        The projection matrix used to transform `Y`.
+
+    coef_ : ndarray of shape (n_targets, n_features)
+        The coefficients of the linear model such that `Y` is approximated as
+        `Y = X @ coef_.T + intercept_`.
+
+    intercept_ : ndarray of shape (n_targets,)
+        The intercepts of the linear model such that `Y` is approximated as
+        `Y = X @ coef_.T + intercept_`.
+
+    n_iter_ : list of shape (n_components,)
+        Number of iterations of the power method, for each
+        component. Empty if `algorithm='svd'`.
+
+    n_features_in_ : int
+        Number of features seen during :term:`fit`.
+
+    feature_names_in_ : ndarray of shape (`n_features_in_`,)
+        Names of features seen during :term:`fit`. Defined only when `X`
+        has feature names that are all strings.
+
+    See Also
+    --------
+    CCA : Canonical Correlation Analysis.
+    PLSSVD : Partial Least Square SVD.
+    PLSCanonical : Partial Least Squares Canonical.
+
+    References
+    ----------
+    [1] Witten, D. M., Tibshirani, R., & Hastie, T. (2009). A penalized matrix
+    decomposition, with applications to sparse principal components and
+    canonical correlation analysis. Biostatistics, 10(3), 515-534.
+    [2] Mihalik, A., Chapman, J., Adams, R. A., Winter, N. R., Ferreira, F. S.,
+    Shawe-Taylor, J., ... & Alzheimer’s Disease Neuroimaging Initiative. (2022).
+    Canonical correlation analysis and partial least squares for identifying
+    brain-behaviour associations: a tutorial and a comparative study. Biological
+    Psychiatry: Cognitive Neuroscience and Neuroimaging.
+
+    Examples
+    --------
+    >>> from sklearn.cross_decomposition import SPLS
+    >>> X = [[0., 0., 1.], [1.,0.,0.], [2.,2.,2.], [2.,5.,4.]]
+    >>> Y = [[0.1, -0.2], [0.9, 1.1], [6.2, 5.9], [11.9, 12.3]]
+    >>> spls = SPLS(n_components=1, penalty_x=0.5, penalty_y=0.5)
+    >>> spls.fit(X, Y)
+    SPLS(penalty_x=0.5, penalty_y=0.5)
+    >>> X_c, Y_c = spls.transform(X, Y)
+    """
+
+    _parameter_constraints: dict = {
+        "n_components": [Interval(Integral, 1, None, closed="left")],
+        "scale": ["boolean"],
+        "max_iter": [Interval(Integral, 1, None, closed="left")],
+        "tol": [Interval(Real, 0, None, closed="left")],
+        "copy": ["boolean"],
+        "penalty_x": [Interval(Real, 0, 1, closed="both")],
+        "penalty_y": [Interval(Real, 0, 1, closed="both")],
+    }
+
+    def __init__(
+        self,
+        n_components=1,
+        *,
+        scale=True,
+        max_iter=500,
+        tol=1e-06,
+        copy=True,
+        penalty_x=1.0,
+        penalty_y=1.0,
+    ):
+        super().__init__(
+            n_components=n_components,
+            scale=scale,
+            algorithm="pmd",
+            max_iter=max_iter,
+            tol=tol,
+            copy=copy,
+        )
+        self.penalty_x = penalty_x
+        self.penalty_y = penalty_y
+
+
+def _soft_threshold(x, c, tol, eps):
+    """
+    Searches for threshold delta such that the 1-norm of weights w is less
+    than or equal to c and the 2-norm is equal to 1.
+    """
+    x /= np.sqrt(np.dot(x, x)) + eps
+
+    def f(delta):
+        coef = np.clip(x - delta, 0, None) - np.clip(-x - delta, 0, None)
+        coef /= np.sqrt(np.dot(coef, coef)) + eps
+        return (np.sum(np.abs(coef)) - c) ** 2
+
+    if np.linalg.norm(x, ord=1) <= c:
+        return x
+
+    result = minimize(
+        f,
+        x0=np.ones(
+            1,
+        )
+        * eps,
+        bounds=[(0, None)],
+        tol=tol,
+    )
+    delta = result.x
+    coef = np.where(x - delta > 0, x - delta, 0) - np.where(
+        -x - delta > 0, -x - delta, 0
+    )
+    coef /= np.sqrt(np.dot(coef, coef)) + eps
+    return coef
