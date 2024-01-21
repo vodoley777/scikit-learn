@@ -1040,17 +1040,15 @@ class Exponentiation(Kernel):
     @property
     def hyperparameters(self):
         """Returns a list of all hyperparameter."""
-        r = []
-        for hyperparameter in self.kernel.hyperparameters:
-            r.append(
-                Hyperparameter(
-                    "kernel__" + hyperparameter.name,
-                    hyperparameter.value_type,
-                    hyperparameter.bounds,
-                    hyperparameter.n_elements,
-                )
+        return [
+            Hyperparameter(
+                "kernel__" + hyperparameter.name,
+                hyperparameter.value_type,
+                hyperparameter.bounds,
+                hyperparameter.n_elements,
             )
-        return r
+            for hyperparameter in self.kernel.hyperparameters
+        ]
 
     @property
     def theta(self):
@@ -2386,7 +2384,7 @@ class PairwiseKernel(Kernel):
 
     def is_stationary(self):
         """Returns whether the kernel is stationary."""
-        return self.metric in ["rbf"]
+        return self.metric == "rbf"
 
     def __repr__(self):
         return "{0}(gamma={1}, metric={2})".format(

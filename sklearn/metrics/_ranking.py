@@ -1231,7 +1231,7 @@ def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None
     for i, (start, stop) in enumerate(zip(y_true.indptr, y_true.indptr[1:])):
         relevant = y_true.indices[start:stop]
 
-        if relevant.size == 0 or relevant.size == n_labels:
+        if relevant.size in (0, n_labels):
             # If all labels are relevant or unrelevant, the score is also
             # equal to 1. The label ranking has no meaning.
             aux = 1.0
@@ -1383,7 +1383,7 @@ def label_ranking_loss(y_true, y_score, *, sample_weight=None):
     check_consistent_length(y_true, y_score, sample_weight)
 
     y_type = type_of_target(y_true, input_name="y_true")
-    if y_type not in ("multilabel-indicator",):
+    if y_type != "multilabel-indicator":
         raise ValueError("{0} format is not supported".format(y_type))
 
     if y_true.shape != y_score.shape:

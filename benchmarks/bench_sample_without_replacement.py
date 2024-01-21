@@ -83,7 +83,7 @@ if __name__ == "__main__":
     #               help="Seed used by the random number generators.")
 
     (opts, args) = op.parse_args()
-    if len(args) > 0:
+    if args:
         op.error("this script takes no arguments.")
         sys.exit(1)
 
@@ -205,7 +205,7 @@ if __name__ == "__main__":
     )
     print(25 * "-" + ("|" + "-" * 14) * 1)
     for key, value in arguments.items():
-        print("%s \t | %s " % (str(key).ljust(16), str(value).strip().center(12)))
+        print("%s \t | %s " % (key.ljust(16), value.strip().center(12)))
     print("")
 
     print("Sampling algorithm performance:")

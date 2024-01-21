@@ -185,7 +185,7 @@ def fetch_kddcup99(
         data = np.r_[normal_samples, abnormal_samples]
         target = np.r_[normal_targets, abnormal_targets]
 
-    if subset == "SF" or subset == "http" or subset == "smtp":
+    if subset in ("SF", "http", "smtp"):
         # select all samples with positive logged_in attribute:
         s = data[:, 11] == 1
         data = np.c_[data[s, :11], data[s, 12:]]
@@ -348,7 +348,7 @@ def _fetch_brute_kddcup99(data_home=None, download_if_missing=True, percent10=Tr
         except Exception as e:
             raise OSError(
                 "The cache for fetch_kddcup99 is invalid, please delete "
-                f"{str(kddcup_dir)} and run the fetch_kddcup99 again"
+                f"{kddcup_dir} and run the fetch_kddcup99 again"
             ) from e
 
     elif download_if_missing:
