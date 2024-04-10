@@ -102,10 +102,26 @@ Scoring                                Function                                 
 'neg_mean_poisson_deviance'            :func:`metrics.mean_poisson_deviance`
 'neg_mean_gamma_deviance'              :func:`metrics.mean_gamma_deviance`
 'neg_mean_absolute_percentage_error'   :func:`metrics.mean_absolute_percentage_error`
-'d2_absolute_error_score'              :func:`metrics.d2_absolute_error_score`
-'d2_pinball_score'                     :func:`metrics.d2_pinball_score`
-'d2_tweedie_score'                     :func:`metrics.d2_tweedie_score`
 ====================================   ==============================================     ==================================
+
+The following metrics functions are not implemented as named
+scorers. They cannot be passed to the ``scoring`` parameters; instead
+their callable needs to be passed to :func:`make_scorer` together with the
+value of the user-settable parameters. See :ref:`scoring` for more
+details on :func:`make_scorer` usage.
+
+=====================================  =========  ==============================================
+Function                               Parameter  Example usage
+=====================================  =========  ==============================================
+**Classification**
+:func:`metrics.fbeta_score`            ``beta``   ``make_scorer(fbeta_score, beta=2)``
+
+**Regression**
+:func:`metrics.mean_tweedie_deviance`  ``power``  ``make_scorer(mean_tweedie_deviance, power=1.5)``
+:func:`metrics.mean_pinball_loss`      ``alpha``  ``make_scorer(mean_pinball_loss, alpha=0.95)``
+:func:`metrics.d2_tweedie_score`       ``power``  ``make_scorer(d2_tweedie_score, power=1.5)``
+:func:`metrics.d2_pinball_score`       ``alpha``  ``make_scorer(d2_pinball_score, alpha=0.95)``
+=====================================  =========  ==============================================
 
 
 Usage examples:
@@ -136,14 +152,11 @@ measuring a prediction error given ground truth and prediction:
 - functions ending with ``_score`` return a value to
   maximize, the higher the better.
 
-- functions ending with ``_error`` or ``_loss`` return a
+- functions ending with ``_error``, ``_loss``, or ``_deviance`` return a
   value to minimize, the lower the better.  When converting
   into a scorer object using :func:`make_scorer`, set
   the ``greater_is_better`` parameter to ``False`` (``True`` by default; see the
   parameter description below).
-
-Metrics available for various machine learning tasks are detailed in sections
-below.
 
 Many metrics are not given names to be used as ``scoring`` values,
 sometimes because they require additional parameters, such as
