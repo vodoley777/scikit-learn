@@ -297,7 +297,7 @@ def supported_float_dtypes(xp, *, device=None):
     xp : module
         Array namespace to inspect.
 
-    device: str, default=None
+    device : str, default=None
         Device to use for dtype selection. If ``None``, then a default device
         is assumed.
 
@@ -695,7 +695,37 @@ def get_namespace(
 def get_namespace_and_device(
     *array_list, remove_none=True, remove_types=(str,), xp=None
 ) -> Tuple[Any, bool, Any]:
-    """Combination into one single function of `get_namespace` and `device`."""
+    """Combination into one single function of `get_namespace` and `device`.
+
+    Parameters
+    ----------
+    *array_list : array objects
+        Array objects.
+
+    remove_none : bool, default=True
+        Whether to ignore None objects passed in arrays.
+
+    remove_types : tuple or list, default=(str,)
+        Types to ignore in the arrays.
+
+    xp : module, default=None
+        Precomputed array namespace module. When passed, typically from a caller
+        that has already performed inspection of its own inputs, skips array
+        namespace inspection.
+
+    Returns
+    -------
+    namespace : module
+        Namespace shared by array objects. If any of the `arrays` are not arrays,
+        the namespace defaults to NumPy.
+
+    is_array_api_compliant : bool
+        True if the arrays are containers that implement the Array API spec.
+        Always False when array_api_dispatch=False.
+
+    out : device
+        `device` object (see the "Device Support" section of the array API spec).
+    """
     array_list = _remove_non_arrays(
         *array_list, remove_none=remove_none, remove_types=remove_types
     )
