@@ -106,8 +106,6 @@ def _handle_zeros_in_scale(scale, copy=True, constant_mask=None):
         return scale
     # scale is an array
     else:
-        # TODO instead of checking for array, check for array API compliance, how?
-        # elif isinstance(scale, np.ndarray):
         xp, _ = get_namespace(scale)
         if constant_mask is None:
             # Detect near constant values to avoid dividing by a very small
