@@ -116,11 +116,6 @@ See :ref:`array_api` for more details.
   :pr:`27800` by :user:`Franck Charras <fcharras>`, :user:`Olivier Grisel <ogrisel>`
   and :user:`Tim Head <betatim>`.
 
-- :class:`sklearn.preprocessing.StandardScaler` now supports Array API compliant inputs.
-  :pr:`27113` by :user:`Alexander Fabisch <AlexanderFabisch>`,
-  `Edoardo Abati <EdAbati>`, `Olivier Grisel <ogrisel>` and
-  `Charles Hill <charlesjhill>`.
-
 Support for building with Meson
 -------------------------------
 
