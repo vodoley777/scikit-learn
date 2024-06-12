@@ -95,6 +95,7 @@ else:
 
     __all__ = [
         "calibration",
+        "callback",
         "cluster",
         "covariance",
         "cross_decomposition",
