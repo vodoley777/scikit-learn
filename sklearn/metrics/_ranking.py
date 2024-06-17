@@ -272,7 +272,7 @@ def average_precision_score(
     prefer_skip_nested_validation=True,
 )
 def det_curve(y_true, y_score, pos_label=None, sample_weight=None):
-    """Compute error rates for different probability thresholds.
+    """Compute Detection Error Tradeoff (DET) for different probability thresholds.
 
     .. note::
        This metric is used for evaluation of ranking and error tradeoffs of
@@ -281,6 +281,11 @@ def det_curve(y_true, y_score, pos_label=None, sample_weight=None):
     Read more in the :ref:`User Guide <det_curve>`.
 
     .. versionadded:: 0.24
+
+    .. versionchanged:: 1.6
+       An arbitrary threshold at infinity is added to represent a classifier
+       that always predicts the negative class, i.e. `fpr=0` and `fnr=1`, unless
+       `fpr=0` is already reached at a finite threshold.
 
     Parameters
     ----------
@@ -314,7 +319,9 @@ def det_curve(y_true, y_score, pos_label=None, sample_weight=None):
         referred to as false rejection or miss rate.
 
     thresholds : ndarray of shape (n_thresholds,)
-        Decreasing score values.
+        Decreasing thresholds on the decision function (either `predict_proba`
+        or `decision_function`) used to compute FPR and FNR. An arbitrary
+        threshold at infinity is added for the case `fpr=0` and `fnr=0`.
 
     See Also
     --------
@@ -344,6 +351,12 @@ def det_curve(y_true, y_score, pos_label=None, sample_weight=None):
         y_true, y_score, pos_label=pos_label, sample_weight=sample_weight
     )
 
+    # add a threshold at inf where the clf always predicts the negative class
+    # i.e. tps = fps = 0
+    tps = np.concatenate(([0], tps))
+    fps = np.concatenate(([0], fps))
+    thresholds = np.concatenate(([np.inf], thresholds))
+
     if len(np.unique(y_true)) != 2:
         raise ValueError(
             "Only one class present in y_true. Detection error "
@@ -354,7 +367,7 @@ def det_curve(y_true, y_score, pos_label=None, sample_weight=None):
     p_count = tps[-1]
     n_count = fps[-1]
 
-    # start with false positives zero
+    # start with false positives zero, which may be at a finite threshold
     first_ind = (
         fps.searchsorted(fps[0], side="right") - 1
         if fps.searchsorted(fps[0], side="right") > 0
@@ -1108,9 +1121,8 @@ def roc_curve(
     are reversed upon returning them to ensure they correspond to both ``fpr``
     and ``tpr``, which are sorted in reversed order during their calculation.
 
-    An arbitrary threshold is added for the case `tpr=0` and `fpr=0` to
-    ensure that the curve starts at `(0, 0)`. This threshold corresponds to the
-    `np.inf`.
+    An arbritrary threshold at infinity is added to represent a classifier
+    that always predicts the negative class, i.e. `fpr=0` and `tpr=0`.
 
     References
     ----------
