@@ -1,6 +1,5 @@
 """Tools to support array_api."""
 
-import itertools
 import math
 from functools import wraps
 
@@ -45,6 +44,17 @@ def yield_namespaces(include_numpy_namespaces=True):
         yield array_namespace
 
 
+def yield_namespace_device_combinations(include_numpy_namespaces=True):
+    """Yield all combinations of array namespaces and their valid devices."""
+    for namespace in yield_namespaces(include_numpy_namespaces):
+        if namespace == "torch":
+            yield namespace, "cpu"
+            yield namespace, "cuda"
+            yield namespace, "mps"
+        else:
+            yield namespace, None
+
+
 def yield_namespace_device_dtype_combinations(include_numpy_namespaces=True):
     """Yield supported namespace, device, dtype tuples for testing.
 
@@ -68,15 +78,15 @@ def yield_namespace_device_dtype_combinations(include_numpy_namespaces=True):
         The name of the data type to use for arrays. Can be None to indicate
         that the default value should be used.
     """
-    for array_namespace in yield_namespaces(
-        include_numpy_namespaces=include_numpy_namespaces
+    for array_namespace, array_device in yield_namespace_device_combinations(
+        include_numpy_namespaces
     ):
         if array_namespace == "torch":
-            for device, dtype in itertools.product(
-                ("cpu", "cuda"), ("float64", "float32")
-            ):
-                yield array_namespace, device, dtype
-            yield array_namespace, "mps", "float32"
+            if array_device == "mps":
+                yield array_namespace, array_device, "float32"
+            else:
+                yield array_namespace, array_device, "float64"
+                yield array_namespace, array_device, "float32"
         else:
             yield array_namespace, None, None
 
@@ -179,6 +189,11 @@ def _is_numpy_namespace(xp):
     return xp.__name__ in _NUMPY_NAMESPACE_NAMES
 
 
+def _is_torch_namespace(xp):
+    """Return True if xp is backed by PyTorch."""
+    return "torch" in xp.__name__
+
+
 def _union1d(a, b, xp):
     if _is_numpy_namespace(xp):
         return xp.asarray(numpy.union1d(a, b))
@@ -232,7 +247,7 @@ def _isdtype_single(dtype, kind, *, xp):
         return dtype == kind
 
 
-def supported_float_dtypes(xp):
+def supported_float_dtypes(xp, *, device=None):
     """Supported floating point types for the namespace.
 
     Note: float16 is not officially part of the Array API spec at the
@@ -241,10 +256,20 @@ def supported_float_dtypes(xp):
 
     https://data-apis.org/array-api/latest/API_specification/data_types.html
     """
-    if hasattr(xp, "float16"):
-        return (xp.float64, xp.float32, xp.float16)
+    if _is_torch_namespace(xp) and device == "mps":
+        dtypes = (xp.float32,)
     else:
-        return (xp.float64, xp.float32)
+        dtypes = (xp.float64, xp.float32)
+
+    if hasattr(xp, "float16"):
+        return (*dtypes, xp.float16)
+
+    return dtypes
+
+
+def max_precision_float_dtype(xp, *, device=None):
+    """Maximum floating point precision supported by the namespace/device pair."""
+    return supported_float_dtypes(xp, device=device)[0]
 
 
 def ensure_common_namespace_device(reference, *arrays):
@@ -550,14 +575,19 @@ def get_namespace(*arrays, remove_none=True, remove_types=(str,), xp=None):
     # message in case it is missing.
     import array_api_compat
 
-    namespace, is_array_api_compliant = array_api_compat.get_namespace(*arrays), True
+    # Convert lists and tuple to numpy arrays.
+    arrays = [
+        numpy.array(arr) if isinstance(arr, (list, tuple)) else arr for arr in arrays
+    ]
+
+    namespace = array_api_compat.get_namespace(*arrays)
 
     # These namespaces need additional wrapping to smooth out small differences
     # between implementations
     if namespace.__name__ in {"cupy.array_api"}:
         namespace = _ArrayAPIWrapper(namespace)
 
-    return namespace, is_array_api_compliant
+    return namespace, True
 
 
 def get_namespace_and_device(*array_list, remove_none=True, remove_types=(str,)):
@@ -733,6 +763,91 @@ def _nanmax(X, axis=None, xp=None):
         if xp.any(mask):
             X = xp.where(mask, xp.asarray(xp.nan), X)
         return X
+
+
+def _nan_to_num(X, *, xp=None, copy=True, nan=0.0, posinf=None, neginf=None):
+    """Port of np.nan_to_num for array-api"""
+    xp, _ = get_namespace(X, xp=xp)
+    # import array_api_strict as xp
+    X = xp.asarray(X, copy=copy)
+    dtype = X.dtype
+    isscaler = X.ndim == 0
+
+    iscomplex = xp.isdtype(dtype, "complex floating")
+
+    # If the input isn't floating, then no changes are made.
+    if not (xp.isdtype(dtype, "real floating") or iscomplex):
+        return X[()] if isscaler else X
+
+    dest = (xp.real(X), xp.imag(X)) if iscomplex else (X,)
+    dtype_info = xp.finfo(X.dtype)
+    maxf, minf = dtype_info.max, dtype_info.min
+
+    if posinf is not None:
+        maxf = posinf
+
+    if neginf is not None:
+        minf = neginf
+
+    for d in dest:
+        nan_mask = xp.isnan(d)
+        inf_mask = xp.isinf(d)
+        posinf_mask = xp.logical_and(inf_mask, d > 0)
+        neginf_mask = xp.logical_xor(inf_mask, posinf_mask)
+        d[nan_mask] = xp.asarray(nan)
+        d[posinf_mask] = xp.asarray(maxf)
+        d[neginf_mask] = xp.asarray(minf)
+    return X[()] if isscaler else X
+
+
+def _intersect1d(ar1, ar2, *, xp=None, assume_unique=False, return_indices=False):
+    """Port of np.intersect1d for array api."""
+    xp, _ = get_namespace(ar1, ar2, xp=xp)
+
+    if return_indices and _is_torch_namespace(xp):
+        # Seems like torch is the only array namespaces in array-api-compat
+        #  which doesn't support getting indices - tough.
+        msg = (
+            "Cannot return indices with the torch backend yet. See" " array_api_compat."
+        )
+        raise NotImplementedError(msg)
+
+    if not assume_unique:
+        if return_indices:
+            ar1_unique_data = xp.unique_all(ar1)
+            ar1 = ar1_unique_data.values
+            ind1 = ar1_unique_data.indices
+
+            ar2_unique_data = xp.unique_all(ar2)
+            ar2 = ar2_unique_data.values
+            ind2 = ar2_unique_data.indices
+        else:
+            ar1 = xp.unique_values(ar1)
+            ar2 = xp.unique_values(ar2)
+    else:
+        ar1 = _ravel(ar1, xp=xp)
+        ar2 = _ravel(ar2, xp=xp)
+
+    aux = xp.concat((ar1, ar2))
+    if return_indices:
+        aux_sort_indices = xp.argsort(aux, stable=True)
+        aux = aux[aux_sort_indices]
+    else:
+        aux = xp.sort(aux, stable=False)
+
+    mask = aux[1:] == aux[:-1]
+    int1d = aux[1:][mask]
+
+    if return_indices:
+        ar1_indices = aux_sort_indices[:-1][mask]
+        ar2_indices = aux_sort_indices[1:][mask] - size(ar1)
+        if not assume_unique:
+            ar1_indices = ind1[ar1_indices]
+            ar2_indices = ind2[ar2_indices]
+
+        return int1d, ar1_indices, ar2_indices
+
+    return int1d
 
 
 def _asarray_with_order(
