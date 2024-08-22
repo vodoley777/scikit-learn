@@ -768,10 +768,16 @@ def test_group_shuffle_split_default_test_size(train_size, exp_train, exp_test):
     y = np.ones(10)
     groups = range(10)
 
-    X_train, X_test = next(GroupShuffleSplit(train_size=train_size).split(X, y, groups))
+    for group_by in ["size", "number"]:
 
-    assert len(X_train) == exp_train
-    assert len(X_test) == exp_test
+        X_train, X_test = next(
+            GroupShuffleSplit(train_size=train_size, group_by=group_by).split(
+                X, y, groups
+            )
+        )
+
+        assert len(X_train) == exp_train
+        assert len(X_test) == exp_test
 
 
 def test_stratified_shuffle_split_init():
@@ -983,40 +989,78 @@ def test_predefinedsplit_with_kfold_split():
 
 
 def test_group_shuffle_split():
+    with pytest.raises(ValueError):
+        GroupShuffleSplit(
+            1, test_size=0.3, group_by="Not a valid option.", random_state=0
+        )
+
     for groups_i in test_groups:
         X = y = np.ones(len(groups_i))
         n_splits = 6
         test_size = 1.0 / 3
-        slo = GroupShuffleSplit(n_splits, test_size=test_size, random_state=0)
 
-        # Make sure the repr works
-        repr(slo)
+        for group_by in ["size", "number"]:
 
-        # Test that the length is correct
-        assert slo.get_n_splits(X, y, groups=groups_i) == n_splits
-
-        l_unique = np.unique(groups_i)
-        l = np.asarray(groups_i)
-
-        for train, test in slo.split(X, y, groups=groups_i):
-            # First test: no train group is in the test set and vice versa
-            l_train_unique = np.unique(l[train])
-            l_test_unique = np.unique(l[test])
-            assert not np.any(np.isin(l[train], l_test_unique))
-            assert not np.any(np.isin(l[test], l_train_unique))
-
-            # Second test: train and test add up to all the data
-            assert l[train].size + l[test].size == l.size
-
-            # Third test: train and test are disjoint
-            assert_array_equal(np.intersect1d(train, test), [])
-
-            # Fourth test:
-            # unique train and test groups are correct, +- 1 for rounding error
-            assert abs(len(l_test_unique) - round(test_size * len(l_unique))) <= 1
-            assert (
-                abs(len(l_train_unique) - round((1.0 - test_size) * len(l_unique))) <= 1
+            slo = GroupShuffleSplit(
+                n_splits, test_size=test_size, group_by=group_by, random_state=0
             )
+
+            # Make sure the repr works
+            repr(slo)
+
+            # Test that the length is correct
+            assert slo.get_n_splits(X, y, groups=groups_i) == n_splits
+
+            l_unique = np.unique(groups_i)
+            l = np.asarray(groups_i)
+
+            for train, test in slo.split(X, y, groups=groups_i):
+                # First test: no train group is in the test set and vice versa
+                l_train_unique = np.unique(l[train])
+                l_test_unique = np.unique(l[test])
+                assert not np.any(np.isin(l[train], l_test_unique))
+                assert not np.any(np.isin(l[test], l_train_unique))
+
+                # Second test: train and test add up to all the data
+                assert l[train].size + l[test].size == l.size
+
+                # Third test: train and test are disjoint
+                assert_array_equal(np.intersect1d(train, test), [])
+
+                if group_by == "number":
+                    # Fourth test:
+                    # unique train and test groups are correct, +- 1 for rounding error
+                    assert (
+                        abs(len(l_test_unique) - round(test_size * len(l_unique))) <= 1
+                    )
+                    assert (
+                        abs(
+                            len(l_train_unique)
+                            - round((1.0 - test_size) * len(l_unique))
+                        )
+                        <= 1
+                    )
+
+
+def test_group_shuffle_split_group_by_size():
+    test_groups_list = [
+        np.array([0, 1, 2, 3, 4]),  # balanced group
+        np.array([0, 0, 0, 0, 0, 1, 2, 3, 4, 5]),  # unbalanced groups
+    ]
+    for groups in test_groups_list:
+        n_splits = 1
+        test_size = 0.2
+        train_size = 1 - test_size
+        X = y = np.ones(len(groups))
+
+        slo = GroupShuffleSplit(
+            n_splits, test_size=test_size, group_by="size", random_state=0
+        )
+        train, test = next(slo.split(X, y, groups=groups))
+
+        # test that train and test samples are split in the correct ratio
+        assert np.isclose(len(train) / len(X), train_size)
+        assert np.isclose(len(test) / len(X), test_size)
 
 
 def test_leave_one_p_group_out():
