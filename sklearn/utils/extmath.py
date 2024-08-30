@@ -12,7 +12,7 @@ from scipy import linalg, sparse
 
 from ..utils._param_validation import Interval, StrOptions, validate_params
 from ..utils.deprecation import deprecated
-from ._array_api import _is_numpy_namespace, device, get_namespace
+from ._array_api import _is_numpy_namespace, device, get_namespace, _isclose
 from .sparsefuncs_fast import csr_row_norms
 from .validation import check_array, check_random_state
 
@@ -1224,9 +1224,10 @@ def stable_cumsum(arr, axis=None, rtol=1e-05, atol=1e-08):
     out : ndarray
         Array with the cumulative sums along the chosen axis.
     """
-    out = np.cumsum(arr, axis=axis, dtype=np.float64)
-    expected = np.sum(arr, axis=axis, dtype=np.float64)
-    if not np.allclose(
+    xp, _ = get_namespace(arr)
+    out = xp.cumulative_sum(arr, axis=axis, dtype=np.float64)
+    expected = xp.sum(arr, axis=axis, dtype=np.float64)
+    if not _isclose(
         out.take(-1, axis=axis), expected, rtol=rtol, atol=atol, equal_nan=True
     ):
         warnings.warn(
