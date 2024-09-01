@@ -14,7 +14,25 @@ import scipy
 import scipy.special as special
 
 from .._config import get_config
+from .._min_dependencies import dependent_packages
 from .fixes import parse_version
+
+# Dictionary listing the methods/estimators to skip
+# testing for a certain array api namespace
+
+# use "all" to skip all testing for an estimator/method
+# for a namespace (not just specific methods)
+# (see the dask.array skip in LinearDiscriminantAnalysis for an example of this)
+_array_api_skips = {
+    # Dask doesn't implement slogdet from the Array API
+    # which is used in score/score_samples
+    "PCA": {"dask.array": ["score", "score_samples"]},
+    # Lazy evaluation semantics: value-dependent shape item value (nan):
+    "LinearDiscriminantAnalysis": {"dask.array": "all"},
+    # Lazy evaluation semantics: cannot assign to an array using a value-dependent
+    # boolean mask.
+    "r2_score": {"dask.array": "all"},
+}
 
 _NUMPY_NAMESPACE_NAMES = {"numpy", "array_api_compat.numpy"}
 
@@ -44,6 +62,7 @@ def yield_namespaces(include_numpy_namespaces=True):
         "array_api_strict",
         "cupy",
         "torch",
+        "dask.array",
     ]:
         if not include_numpy_namespaces and array_namespace in _NUMPY_NAMESPACE_NAMES:
             continue
@@ -99,6 +118,13 @@ def _check_array_api_dispatch(array_api_dispatch):
             raise ImportError(
                 "array_api_compat is required to dispatch arrays using the API"
                 " specification"
+            )
+        array_api_compat_version = parse_version(array_api_compat.__version__)
+        min_array_api_compat_version = dependent_packages["array-api-compat"][0]
+        if array_api_compat_version < parse_version(min_array_api_compat_version):
+            raise ImportError(
+                f"array-api-compat must be {min_array_api_compat_version} or newer to"
+                " dispatch array using the API specification"
             )
 
         numpy_version = parse_version(numpy.__version__)
