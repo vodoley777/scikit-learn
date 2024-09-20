@@ -683,6 +683,7 @@ sphinx_gallery_conf = {
     "plot_gallery": "True",
     "recommender": {"enable": True, "n_examples": 4, "min_df": 12},
     "reset_modules": ("matplotlib", "seaborn", reset_sklearn_config),
+    "parallel": 2,
 }
 if with_jupyterlite:
     sphinx_gallery_conf["jupyterlite"] = {
@@ -708,7 +709,7 @@ for sub_sg_dir in (Path(".") / sg_examples_dir).iterdir():
 carousel_thumbs = {"sphx_glr_plot_classifier_comparison_001.png": 600}
 
 
-# enable experimental module so that experimental estimators can be
+# enable experimental modules so that experimental estimators can be
 # discovered properly by sphinx
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.experimental import enable_halving_search_cv  # noqa
