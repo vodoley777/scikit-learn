@@ -63,8 +63,8 @@ def test_roc_curve_display_plotting(
     lr = LogisticRegression()
     lr.fit(X, y)
 
-    y_pred = getattr(lr, response_method)(X)
-    y_pred = y_pred if y_pred.ndim == 1 else y_pred[:, 1]
+    y_score = getattr(lr, response_method)(X)
+    y_score = y_score if y_score.ndim == 1 else y_score[:, 1]
 
     if constructor_name == "from_estimator":
         display = RocCurveDisplay.from_estimator(
@@ -79,7 +79,7 @@ def test_roc_curve_display_plotting(
     else:
         display = RocCurveDisplay.from_predictions(
             y,
-            y_pred,
+            y_score,
             sample_weight=sample_weight,
             drop_intermediate=drop_intermediate,
             pos_label=pos_label,
@@ -88,7 +88,7 @@ def test_roc_curve_display_plotting(
 
     fpr, tpr, _ = roc_curve(
         y,
-        y_pred,
+        y_score,
         sample_weight=sample_weight,
         drop_intermediate=drop_intermediate,
         pos_label=pos_label,
@@ -143,8 +143,8 @@ def test_roc_curve_chance_level_line(
     lr = LogisticRegression()
     lr.fit(X, y)
 
-    y_pred = getattr(lr, "predict_proba")(X)
-    y_pred = y_pred if y_pred.ndim == 1 else y_pred[:, 1]
+    y_score = getattr(lr, "predict_proba")(X)
+    y_score = y_score if y_score.ndim == 1 else y_score[:, 1]
 
     if constructor_name == "from_estimator":
         display = RocCurveDisplay.from_estimator(
@@ -158,7 +158,7 @@ def test_roc_curve_chance_level_line(
     else:
         display = RocCurveDisplay.from_predictions(
             y,
-            y_pred,
+            y_score,
             alpha=0.8,
             plot_chance_level=plot_chance_level,
             chance_level_kw=chance_level_kw,
@@ -270,11 +270,11 @@ def test_plot_roc_curve_pos_label(pyplot, response_method, constructor_name):
     # are betrayed by the class imbalance
     assert classifier.classes_.tolist() == ["cancer", "not cancer"]
 
-    y_pred = getattr(classifier, response_method)(X_test)
+    y_score = getattr(classifier, response_method)(X_test)
     # we select the corresponding probability columns or reverse the decision
     # function otherwise
-    y_pred_cancer = -1 * y_pred if y_pred.ndim == 1 else y_pred[:, 0]
-    y_pred_not_cancer = y_pred if y_pred.ndim == 1 else y_pred[:, 1]
+    y_score_cancer = -1 * y_score if y_score.ndim == 1 else y_score[:, 0]
+    y_score_not_cancer = y_score if y_score.ndim == 1 else y_score[:, 1]
 
     if constructor_name == "from_estimator":
         display = RocCurveDisplay.from_estimator(
@@ -287,7 +287,7 @@ def test_plot_roc_curve_pos_label(pyplot, response_method, constructor_name):
     else:
         display = RocCurveDisplay.from_predictions(
             y_test,
-            y_pred_cancer,
+            y_score_cancer,
             pos_label="cancer",
         )
 
@@ -307,9 +307,54 @@ def test_plot_roc_curve_pos_label(pyplot, response_method, constructor_name):
     else:
         display = RocCurveDisplay.from_predictions(
             y_test,
-            y_pred_not_cancer,
+            y_score_not_cancer,
             pos_label="not cancer",
         )
 
     assert display.roc_auc == pytest.approx(roc_auc_limit)
     assert trapezoid(display.tpr, display.fpr) == pytest.approx(roc_auc_limit)
+
+
+# TODO(1.8): remove
+def test_y_score_and_y_pred_deprecation():
+    y_true = np.array([0, 1, 1, 0])
+    y_score = np.array([0.1, 0.4, 0.35, 0.8])
+    y_pred = np.array([0.2, 0.3, 0.5, 0.1])
+
+    # Test that an error is raised when both y_score and y_pred are specified
+    with pytest.raises(
+        ValueError, match="`y_pred` and `y_score` cannot be both specified"
+    ):
+        RocCurveDisplay.from_predictions(y_true, y_score=y_score, y_pred=y_pred)
+
+    # Test that y_score is used when y_pred is not specified
+    display = RocCurveDisplay.from_predictions(y_true, y_score=y_score)
+    assert_allclose(display.fpr, [0, 0.5, 0.5, 1])
+    assert_allclose(display.tpr, [0, 0, 1, 1])
+
+    # Test that y_score is used when y_pred is "deprecated"
+    display = RocCurveDisplay.from_predictions(
+        y_true, y_score=y_score, y_pred="deprecated"
+    )
+    assert_allclose(display.fpr, [0, 0.5, 0.5, 1])
+    assert_allclose(display.tpr, [0, 0, 1, 1])
+
+
+def test_y_pred_deprecation_warning():
+    y_true = np.array([0, 1, 1, 0])
+    y_pred = np.array([0.1, 0.4, 0.35, 0.8])
+
+    with pytest.warns(FutureWarning, match="y_pred was deprecated in version 1.6"):
+        display = RocCurveDisplay.from_predictions(y_true, y_pred=y_pred)
+
+    assert_allclose(display.fpr, [0, 0.5, 0.5, 1])
+    assert_allclose(display.tpr, [0, 0, 1, 1])
+
+    # Test that y_score is used when y_pred is "deprecated"
+    y_score = np.array([0.2, 0.3, 0.5, 0.1])
+    display = RocCurveDisplay.from_predictions(
+        y_true, y_score=y_score, y_pred="deprecated"
+    )
+    assert_allclose(display.fpr, [0, 0.5, 0.5, 1])
+    assert_allclose(display.tpr, [0, 0, 1, 1])
+    assert np.array_equal(display.y_score, y_score)
