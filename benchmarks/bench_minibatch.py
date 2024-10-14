@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn import metrics
-from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 from sklearn.datasets import fetch_20newsgroups, fetch_openml
 from sklearn.decomposition._truncated_svd import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -243,10 +243,7 @@ for dataset_name in dataset_names:
             adaptive_lr=False,
             tol=tol,
         )
-        km_full = KMeans(
-            n_clusters=n_clusters,
-            max_iter=num_iters,
-            tol=tol)
+        km_full = KMeans(n_clusters=n_clusters, max_iter=num_iters, tol=tol)
         mbks = {
             "1.new lr MiniBatch": mbk_newlr,
             "2.MiniBatch": mbk_oldlr,
