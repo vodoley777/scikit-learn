@@ -15,6 +15,7 @@ import scipy.special as special
 
 from .._config import get_config
 from .fixes import parse_version
+from ..vendored import array_api_extra as xpx
 
 _NUMPY_NAMESPACE_NAMES = {"numpy", "array_api_compat.numpy"}
 
@@ -942,28 +943,6 @@ def _searchsorted(a, v, *, side="left", sorter=None, xp=None):
     return xp.asarray(indices, device=device(a))
 
 
-def _setdiff1d(ar1, ar2, xp, assume_unique=False):
-    """Find the set difference of two arrays.
-
-    Return the unique values in `ar1` that are not in `ar2`.
-    """
-    if _is_numpy_namespace(xp):
-        return xp.asarray(
-            numpy.setdiff1d(
-                ar1=ar1,
-                ar2=ar2,
-                assume_unique=assume_unique,
-            )
-        )
-
-    if assume_unique:
-        ar1 = xp.reshape(ar1, (-1,))
-    else:
-        ar1 = xp.unique_values(ar1)
-        ar2 = xp.unique_values(ar2)
-    return ar1[_in1d(ar1=ar1, ar2=ar2, xp=xp, assume_unique=True, invert=True)]
-
-
 def _isin(element, test_elements, xp, assume_unique=False, invert=False):
     """Calculates ``element in test_elements``, broadcasting over `element`
     only.
@@ -996,8 +975,8 @@ def _isin(element, test_elements, xp, assume_unique=False, invert=False):
     )
 
 
-# Note: This is a helper for the functions `_isin` and
-# `_setdiff1d`. It is not meant to be called directly.
+# Note: This is a helper for the function `_isin`.
+# It is not meant to be called directly.
 def _in1d(ar1, ar2, xp, assume_unique=False, invert=False):
     """Checks whether each element of an array is also present in a
     second array.
