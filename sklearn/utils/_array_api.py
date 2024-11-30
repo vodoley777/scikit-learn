@@ -451,7 +451,6 @@ class _NumPyAPIWrapper:
         if stable:
             kwargs["kind"] = "stable"
         if not descending:
-            breakpoint()
             res = numpy.argsort(x, axis=axis, **kwargs)
         else:
             # As NumPy has no native descending sort, we imitate it here. Note that
