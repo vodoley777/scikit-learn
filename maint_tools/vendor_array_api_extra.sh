@@ -2,8 +2,8 @@
 
 # Vendors https://github.com/data-apis/array-api-extra/ into sklearn/externals
 
-VERSION="0.3.2"
-URL="https://github.com/data-apis/array-api-extra/archive/refs/tags/v0.3.2.tar.gz"
+VERSION="0.3.3"
+URL="https://github.com/data-apis/array-api-extra/archive/refs/tags/v0.3.3.tar.gz"
 ROOT_DIR=sklearn/externals/_array_api_extra
 
 rm -rf $ROOT_DIR/*
