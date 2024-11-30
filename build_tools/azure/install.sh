@@ -96,8 +96,6 @@ scikit_learn_install() {
     setup_ccache
     show_installed_libraries
 
-    git submodule update --init
-
     if [[ "$UNAMESTR" == "Darwin" && "$SKLEARN_TEST_NO_OPENMP" == "true" ]]; then
         # Without openmp, we use the system clang. Here we use /usr/bin/ar
         # instead because llvm-ar errors

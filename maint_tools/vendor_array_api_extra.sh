@@ -18,6 +18,7 @@ curl -s -L $URL |
         array_api_extra-$VERSION/src/array_api_extra/_lib/_utils.py \
         array_api_extra-$VERSION/LICENSE
 
-mv $ROOT_DIR/src/array_api_extra $ROOT_DIR
+mv $ROOT_DIR/src/array_api_extra/* $ROOT_DIR
+rm -rf $ROOT_DIR/src 
 
 echo "Update this directory using maint_tools/vendor_array_api_extra.sh" >$ROOT_DIR/README.md

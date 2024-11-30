@@ -15,7 +15,7 @@ import scipy.special as special
 
 from .._config import get_config
 from .fixes import parse_version
-from ..vendored import array_api_extra as xpx
+from ..externals import _array_api_extra as xpx
 
 _NUMPY_NAMESPACE_NAMES = {"numpy", "array_api_compat.numpy"}
 

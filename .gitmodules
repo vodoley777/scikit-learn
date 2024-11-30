@@ -1,4 +1,0 @@
-[submodule "sklearn/vendored/array_api_extra"]
-    path = sklearn/vendored/array_api_extra/
-    url = https://github.com/lucascolley/array-api-extra.git
-    branch = isin
