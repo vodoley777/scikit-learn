@@ -447,10 +447,11 @@ class _NumPyAPIWrapper:
         return numpy.power(x1, x2)
 
     # from array-api-compat
-    def argsort(x, axis=-1, descending=False, stable=True, **kwargs):
+    def argsort(self, x, axis=-1, descending=False, stable=True, **kwargs):
         if stable:
             kwargs["kind"] = "stable"
         if not descending:
+            breakpoint()
             res = numpy.argsort(x, axis=axis, **kwargs)
         else:
             # As NumPy has no native descending sort, we imitate it here. Note that
