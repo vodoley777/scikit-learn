@@ -14,8 +14,8 @@ import scipy.sparse as sp
 import scipy.special as special
 
 from .._config import get_config
+from ..externals import _array_api_extra as xpx  # noqa: F401
 from .fixes import parse_version
-from ..externals import _array_api_extra as xpx
 
 _NUMPY_NAMESPACE_NAMES = {"numpy", "array_api_compat.numpy"}
 
