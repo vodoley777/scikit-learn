@@ -445,11 +445,11 @@ class _NumPyAPIWrapper:
 
     def pow(self, x1, x2):
         return numpy.power(x1, x2)
-    
+
     # from array-api-compat
     def argsort(x, axis=-1, descending=False, stable=True, **kwargs):
         if stable:
-            kwargs['kind'] = "stable"
+            kwargs["kind"] = "stable"
         if not descending:
             res = numpy.argsort(x, axis=axis, **kwargs)
         else:
