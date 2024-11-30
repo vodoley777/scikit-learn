@@ -2,18 +2,22 @@
 
 # Vendors https://github.com/data-apis/array-api-extra/ into sklearn/externals
 
-SHA="2334bd279d40e0dadd3af48fe4ec494d3ce7f47d"
-URL="https://github.com/scientific-python/lazy_loader/archive/2334bd279d40e0dadd3af48fe4ec494d3ce7f47d.tar.gz"
-ROOT_DIR=sklearn/externals/_lazy_loader
+VERSION="0.3.1"
+URL="https://files.pythonhosted.org/packages/b1/2c/e19c8a07f92635d60b5840387dbe91559f0f582f67214b356b769f7b1b4b/array_api_extra-0.3.1.tar.gz"
+ROOT_DIR=sklearn/externals/_array_api_extra
 
 rm -rf $ROOT_DIR/*
 
 curl -s -L $URL |
-    tar xvz --strip-components=1 -C sklearn/externals/_lazy_loader \
-        lazy_loader-$SHA/lazy_loader/__init__.py \
-        lazy_loader-$SHA/LICENSE.md
+    tar xvz --strip-components=1 -C sklearn/externals/_array_api_extra \
+        array_api_extra-$VERSION/src/array_api_extra/__init__.py \
+        array_api_extra-$VERSION/src/array_api_extra/_funcs.py \
+        array_api_extra-$VERSION/src/array_api_extra/py.typed \
+        array_api_extra-$VERSION/src/array_api_extra/_lib/_compat.py \
+        array_api_extra-$VERSION/src/array_api_extra/_lib/_typing.py \
+        array_api_extra-$VERSION/src/array_api_extra/_lib/_utils.py \
+        array_api_extra-$VERSION/LICENSE
 
-mv $ROOT_DIR/lazy_loader/__init__.py $ROOT_DIR/__init__.py
-rmdir $ROOT_DIR/lazy_loader
+mv $ROOT_DIR/src/array_api_extra $ROOT_DIR
 
-echo "Update this directory using maint_tools/vendor_lazy_loader.sh" >$ROOT_DIR/README.md
+echo "Update this directory using maint_tools/vendor_array_api_extra.sh" >$ROOT_DIR/README.md
