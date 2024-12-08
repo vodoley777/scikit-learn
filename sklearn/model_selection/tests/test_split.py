@@ -1862,23 +1862,20 @@ def test_group_time_series_fail_groups_are_none():
     X = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14]]
 
     # Should fail if the 'groups' is None
-    with pytest.raises(
-            ValueError,
-            match="The 'groups' parameter should not be None"):
+    with pytest.raises(ValueError, match="The 'groups' parameter should not be None"):
         next(GroupTimeSeriesSplit(n_splits=7).split(X))
 
 
 def test_group_time_series_ordering_and_group_preserved():
     # With this test we check that we are only evaluating
     # unseen groups in the future
-    groups = np.array(['a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c',
-                      'd', 'd', 'd'])
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
     n_samples = len(groups)
     n_splits = 3
 
     X = y = np.ones(n_samples)
     # Fake array of time like
-    time_stamps = X * np.arange(n_samples)
+    time_stamps = np.arange(n_samples)
 
     gtf = GroupTimeSeriesSplit(n_splits=n_splits)
 
@@ -1886,16 +1883,15 @@ def test_group_time_series_ordering_and_group_preserved():
     # 1. Elements of a group in the evaluation split should not be
     # in the training split
     # 2. Elements of the training split should be in the past
-    splits = gtf.split(X, y, groups)
+    splits = gtf.split(X, y=y, groups=groups)
 
     # Get all the other entries for the groups found in test
-    for (train, test) in splits:
+    for train, test in splits:
         # verify that they are not in the test set
         assert len(np.intersect1d(groups[train], groups[test])) == 0
         # All the elements in the train set should be in past of the
         # elements of the test set
-        for e in time_stamps[train]:
-            assert (e < time_stamps[test]).all()
+        assert (time_stamps[train].max() < time_stamps[test]).all()
 
 
 def test_group_time_series_more_folds_than_group():
@@ -1903,101 +1899,1003 @@ def test_group_time_series_more_folds_than_group():
     groups = np.array([1, 1, 1, 2, 2])
     X = y = np.ones(len(groups))
     with pytest.raises(
-            ValueError,
-            match="Cannot have number of folds=4 greater"
-                  " than the number of groups=2"):
+        ValueError,
+        match="Cannot have number of folds=4 greater than the number of groups=2",
+    ):
         next(GroupTimeSeriesSplit(n_splits=3).split(X, y, groups))
 
 
 def test_group_time_series_max_train_size():
-    groups = np.array(['a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c',
-                       'd', 'd', 'd'])
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
     n_samples = len(groups)
     X = y = np.ones(n_samples)
-    splits = GroupTimeSeriesSplit(n_splits=3,
-                                  max_train_size=3).split(X, y, groups)
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=3).split(X, y, groups)
+    splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=3).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=3).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=3)
 
     # Test for the case where the size of a fold is greater than max_train_size
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=2).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=2).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
     # Test for the case where the size of each fold is less than max_train_size
-    check_splits = GroupTimeSeriesSplit(n_splits=3,
-                                        max_train_size=5).split(X, y, groups)
+    check_splits = GroupTimeSeriesSplit(n_splits=3, max_train_size=5).split(
+        X, y, groups
+    )
     _check_time_series_max_train_size(splits, check_splits, max_train_size=2)
 
 
 def test_group_time_series_non_overlap_group():
-    groups = np.array(['a', 'a', 'a', 'a', 'a', 'a', 'b', 'b', 'b', 'b', 'b',
-                       'c', 'c', 'c', 'c', 'd', 'd', 'd'])
+    groups = np.array(
+        (["a"] * 3)
+        + (["b"] * 2)
+        + (["c"] * 3)
+        + (["d"] * 2)
+        + (["e"] * 3)
+        + (["f"] * 2)
+        + (["g"] * 3)
+        + (["h"] * 2)
+        + (["i"] * 3)
+        + (["j"] * 2)
+        + (["k"] * 3)
+    )
     gtss = GroupTimeSeriesSplit(n_splits=3)
     splits = gtss.split(groups, groups=groups)
     train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5]))
-    assert_array_equal(test, np.array([6, 7, 8, 9, 10]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a',
-                                                'a', 'a', 'a']))
-    assert_array_equal(groups[test], np.array(['b', 'b', 'b', 'b', 'b']))
+    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]))
+    assert_array_equal(test, np.array([13, 14, 15, 16, 17]))
+    assert_array_equal(
+        groups[train],
+        np.array(["a", "a", "a", "b", "b", "c", "c", "c", "d", "d", "e", "e", "e"]),
+    )
+    assert_array_equal(groups[test], np.array(["f", "f", "g", "g", "g"]))
 
     train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
-    assert_array_equal(test, np.array([11, 12, 13, 14]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a', 'a',
-                                                'a', 'a',
-                                                'b', 'b', 'b', 'b', 'b']))
-    assert_array_equal(groups[test], np.array(['c', 'c', 'c', 'c']))
+    assert_array_equal(
+        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
+    )
+    assert_array_equal(test, np.array([18, 19, 20, 21, 22]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["h", "h", "i", "i", "i"]))
 
     train, test = next(splits)
-    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8,
-                                        9, 10, 11, 12, 13, 14]))
-    assert_array_equal(test, np.array([15, 16, 17]))
-    assert_array_equal(groups[train], np.array(['a', 'a', 'a',
-                                                'a', 'a', 'a',
-                                                'b', 'b', 'b', 'b', 'b',
-                                                'c', 'c', 'c', 'c']))
-    assert_array_equal(groups[test], ['d', 'd', 'd'])
+    assert_array_equal(
+        train,
+        np.array(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+            ]
+        ),
+    )
+    assert_array_equal(test, np.array([23, 24, 25, 26, 27]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "h",
+                "h",
+                "i",
+                "i",
+                "i",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
 
 
-@pytest.mark.parametrize('cv, expected', [
-    (KFold(), True),
-    (KFold(shuffle=True, random_state=123), True),
-    (StratifiedKFold(), True),
-    (StratifiedKFold(shuffle=True, random_state=123), True),
-    (RepeatedKFold(random_state=123), True),
-    (RepeatedStratifiedKFold(random_state=123), True),
-    (ShuffleSplit(random_state=123), True),
-    (GroupShuffleSplit(random_state=123), True),
-    (StratifiedShuffleSplit(random_state=123), True),
-    (GroupKFold(), True),
-    (TimeSeriesSplit(), True),
-    (LeaveOneOut(), True),
-    (LeaveOneGroupOut(), True),
-    (LeavePGroupsOut(n_groups=2), True),
-    (LeavePOut(p=2), True),
+def test_group_time_series_non_overlap_group_with_gap():
+    groups = np.array(
+        (["a"] * 3)
+        + (["b"] * 2)
+        + (["c"] * 3)
+        + (["d"] * 2)
+        + (["e"] * 3)
+        + (["f"] * 2)
+        + (["g"] * 3)
+        + (["h"] * 2)
+        + (["i"] * 3)
+        + (["j"] * 2)
+        + (["k"] * 3)
+    )
+    gtss = GroupTimeSeriesSplit(n_splits=3, gap=1)
+    splits = gtss.split(groups, groups=groups)
+    train, test = next(splits)
+    assert_array_equal(train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
+    assert_array_equal(test, np.array([13, 14, 15, 16, 17]))
+    assert_array_equal(
+        groups[train], np.array(["a", "a", "a", "b", "b", "c", "c", "c", "d", "d"])
+    )
+    assert_array_equal(groups[test], np.array(["f", "f", "g", "g", "g"]))
 
-    (KFold(shuffle=True, random_state=None), False),
-    (KFold(shuffle=True, random_state=None), False),
-    (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)),
-     False),
-    (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)),
-     False),
-    (RepeatedKFold(random_state=None), False),
-    (RepeatedKFold(random_state=np.random.RandomState(0)), False),
-    (RepeatedStratifiedKFold(random_state=None), False),
-    (RepeatedStratifiedKFold(random_state=np.random.RandomState(0)), False),
-    (ShuffleSplit(random_state=None), False),
-    (ShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (GroupShuffleSplit(random_state=None), False),
-    (GroupShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (StratifiedShuffleSplit(random_state=None), False),
-    (StratifiedShuffleSplit(random_state=np.random.RandomState(0)), False),
-    (GroupTimeSeriesSplit(), True),
-    (GroupTimeSeriesSplit(n_splits=3), True),
-    (GroupTimeSeriesSplit(n_splits=3, max_train_size=3), True),
-])
+    train, test = next(splits)
+    assert_array_equal(
+        train, np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+    )
+    assert_array_equal(test, np.array([18, 19, 20, 21, 22]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            ["a", "a", "a", "b", "b", "c", "c", "c", "d", "d", "e", "e", "e", "f", "f"]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["h", "h", "i", "i", "i"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        ),
+    )
+    assert_array_equal(test, np.array([23, 24, 25, 26, 27]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "h",
+                "h",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["j", "j", "k", "k", "k"]))
+
+
+def test_group_time_series_non_overlap_group_imbalanced():
+    groups = np.array(
+        (["a"] * 20)
+        + (["b"] * 12)
+        + (["c"] * 30)
+        + (["d"] * 2)
+        + (["e"] * 3)
+        + (["f"] * 20)
+        + (["g"] * 30)
+        + (["h"] * 2)
+        + (["i"] * 3)
+        + (["j"] * 2)
+        + (["k"] * 3)
+    )
+    gtss = GroupTimeSeriesSplit(n_splits=3, gap=1)
+    splits = gtss.split(groups, groups=groups)
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                49,
+                50,
+                51,
+                52,
+                53,
+                54,
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+            ]
+        ),
+    )
+    assert_array_equal(
+        test,
+        np.array(
+            [
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75,
+                76,
+                77,
+                78,
+                79,
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96,
+                97,
+                98,
+                99,
+                100,
+                101,
+                102,
+                103,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+            ]
+        ),
+    )
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+            ]
+        ),
+    )
+    assert_array_equal(
+        groups[test],
+        np.array(
+            [
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+            ]
+        ),
+    )
+
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                49,
+                50,
+                51,
+                52,
+                53,
+                54,
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66,
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75,
+                76,
+                77,
+                78,
+                79,
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+            ]
+        ),
+    )
+    assert_array_equal(test, np.array([117, 118, 119, 120, 121]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], np.array(["h", "h", "i", "i", "i"]))
+
+    train, test = next(splits)
+    assert_array_equal(
+        train,
+        np.array(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                49,
+                50,
+                51,
+                52,
+                53,
+                54,
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66,
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75,
+                76,
+                77,
+                78,
+                79,
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96,
+                97,
+                98,
+                99,
+                100,
+                101,
+                102,
+                103,
+                104,
+                105,
+                106,
+                107,
+                108,
+                109,
+                110,
+                111,
+                112,
+                113,
+                114,
+                115,
+                116,
+                117,
+                118,
+            ]
+        ),
+    )
+    assert_array_equal(test, np.array([122, 123, 124, 125, 126]))
+    assert_array_equal(
+        groups[train],
+        np.array(
+            [
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "a",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "b",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "c",
+                "d",
+                "d",
+                "e",
+                "e",
+                "e",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "f",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "g",
+                "h",
+                "h",
+            ]
+        ),
+    )
+    assert_array_equal(groups[test], ["j", "j", "k", "k", "k"])
+
+
+def test_group_time_series_non_contiguous():
+    groups = np.array(["a", "a", "a", "a", "a", "b", "a", "b", "c", "c"])
+    X = y = np.ones(len(groups))
+    with pytest.raises(
+        ValueError,
+        match=(
+            "The groups should be contiguous. Found a non-contiguous group at index=6"
+        ),
+    ):
+        next(GroupTimeSeriesSplit(n_splits=2).split(X, y, groups))
+
+
+@pytest.mark.parametrize(
+    "cv, expected",
+    [
+        (KFold(), True),
+        (KFold(shuffle=True, random_state=123), True),
+        (StratifiedKFold(), True),
+        (StratifiedKFold(shuffle=True, random_state=123), True),
+        (RepeatedKFold(random_state=123), True),
+        (RepeatedStratifiedKFold(random_state=123), True),
+        (ShuffleSplit(random_state=123), True),
+        (GroupShuffleSplit(random_state=123), True),
+        (StratifiedShuffleSplit(random_state=123), True),
+        (GroupKFold(), True),
+        (TimeSeriesSplit(), True),
+        (LeaveOneOut(), True),
+        (LeaveOneGroupOut(), True),
+        (LeavePGroupsOut(n_groups=2), True),
+        (LeavePOut(p=2), True),
+        (KFold(shuffle=True, random_state=None), False),
+        (KFold(shuffle=True, random_state=None), False),
+        (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)), False),
+        (StratifiedKFold(shuffle=True, random_state=np.random.RandomState(0)), False),
+        (RepeatedKFold(random_state=None), False),
+        (RepeatedKFold(random_state=np.random.RandomState(0)), False),
+        (RepeatedStratifiedKFold(random_state=None), False),
+        (RepeatedStratifiedKFold(random_state=np.random.RandomState(0)), False),
+        (ShuffleSplit(random_state=None), False),
+        (ShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (GroupShuffleSplit(random_state=None), False),
+        (GroupShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (StratifiedShuffleSplit(random_state=None), False),
+        (StratifiedShuffleSplit(random_state=np.random.RandomState(0)), False),
+        (GroupTimeSeriesSplit(), True),
+        (GroupTimeSeriesSplit(n_splits=3), True),
+        (GroupTimeSeriesSplit(n_splits=3, max_train_size=3), True),
+    ],
+)
 def test_yields_constant_splits(cv, expected):
     assert _yields_constant_splits(cv) == expected
