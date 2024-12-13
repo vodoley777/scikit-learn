@@ -198,13 +198,13 @@ for cv in cvs:
 cvs = [
     KFold,
     GroupKFold,
+    GroupTimeSeriesSplit,
     ShuffleSplit,
     StratifiedKFold,
     StratifiedGroupKFold,
     GroupShuffleSplit,
     StratifiedShuffleSplit,
     TimeSeriesSplit,
-    GroupTimeSeriesSplit,
 ]
 
 
