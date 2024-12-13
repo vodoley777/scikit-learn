@@ -86,7 +86,6 @@ __all__ = [
     "train_test_split",
     "validation_curve",
     "ValidationCurveDisplay",
-    
 ]
 
 
