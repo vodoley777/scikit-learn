@@ -23,12 +23,12 @@ from matplotlib.patches import Patch
 from sklearn.model_selection import (
     GroupKFold,
     GroupShuffleSplit,
+    GroupTimeSeriesSplit,
     KFold,
     ShuffleSplit,
     StratifiedGroupKFold,
     StratifiedKFold,
     StratifiedShuffleSplit,
-    GroupTimeSeriesSplit,
     TimeSeriesSplit,
 )
 
