@@ -31,7 +31,6 @@ from sklearn.model_selection import (
     TimeSeriesSplit,
 )
 
-
 rng = np.random.RandomState(1338)
 cmap_data = plt.cm.Paired
 cmap_cv = plt.cm.coolwarm
