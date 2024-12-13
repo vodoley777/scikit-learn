@@ -16,6 +16,7 @@ from ._split import (
     BaseShuffleSplit,
     GroupKFold,
     GroupShuffleSplit,
+    GroupTimeSeriesSplit,
     KFold,
     LeaveOneGroupOut,
     LeaveOneOut,
@@ -29,7 +30,6 @@ from ._split import (
     StratifiedKFold,
     StratifiedShuffleSplit,
     TimeSeriesSplit,
-    GroupTimeSeriesSplit,
     check_cv,
     train_test_split,
 )
@@ -53,11 +53,12 @@ if typing.TYPE_CHECKING:
 
 __all__ = [
     "BaseCrossValidator",
+    "BaseShuffleSplit",
     "GridSearchCV",
-    "TimeSeriesSplit",
     "KFold",
     "GroupKFold",
     "GroupShuffleSplit",
+    "GroupTimeSeriesSplit",
     "LeaveOneGroupOut",
     "LeaveOneOut",
     "LeavePGroupsOut",
@@ -74,6 +75,7 @@ __all__ = [
     "FixedThresholdClassifier",
     "TunedThresholdClassifierCV",
     "StratifiedGroupKFold",
+    "TimeSeriesSplit",
     "check_cv",
     "cross_val_predict",
     "cross_val_score",
@@ -84,7 +86,7 @@ __all__ = [
     "train_test_split",
     "validation_curve",
     "ValidationCurveDisplay",
-    "GroupTimeSeriesSplit",
+    
 ]
 
 
