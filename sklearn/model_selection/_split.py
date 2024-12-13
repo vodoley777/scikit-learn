@@ -3042,7 +3042,7 @@ class GroupTimeSeriesSplit(_BaseKFold):
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'a' 'a' 'b' 'b' 'b' 'b' 'b' 'c' 'c' 'c' 'c']\
     TEST GROUP: ['d' 'd' 'd']
     """
-    @_deprecate_positional_args
+   
     def __init__(self,
                  n_splits=5,
                  *,
@@ -3198,7 +3198,6 @@ class GroupTimeSeriesSplit(_BaseKFold):
     TRAIN GROUP: ['a' 'a' 'a' 'a' 'b' 'b' 'b' 'c' 'c' 'c' 'c'] TEST GROUP: ['d' 'd' 'd']
     """
 
-    @_deprecate_positional_args
     def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
         super().__init__(n_splits, shuffle=False, random_state=None)
         self.max_train_size = max_train_size
