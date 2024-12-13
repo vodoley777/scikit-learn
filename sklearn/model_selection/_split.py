@@ -2977,8 +2977,7 @@ def _build_repr(self):
     return "%s(%s)" % (class_name, _pprint(params, offset=len(class_name)))
 
 
-
-class GroupTimeSeriesSplit(GroupsConsumerMixin,_BaseKFold):
+class GroupTimeSeriesSplit(GroupsConsumerMixin, _BaseKFold):
     """Time Series cross-validator variant with non-overlapping groups.
 
     Provides train/test indices to split time series data samples that are
