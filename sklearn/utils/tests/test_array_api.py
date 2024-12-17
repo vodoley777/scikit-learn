@@ -62,12 +62,7 @@ def test_get_namespace_ndarray_creation_device():
 @skip_if_array_api_compat_not_configured
 def test_get_namespace_ndarray_with_dispatch():
     """Test get_namespace on NumPy ndarrays."""
-    array_api_compat = pytest.importorskip("array_api_compat")
-    if parse_version(array_api_compat.__version__) < parse_version("1.9"):
-        pytest.skip(
-            reason="array_api_compat was temporarily reporting NumPy as API compliant "
-            "and this test would fail"
-        )
+    from sklearn.externals.array_api_compat import numpy as np_compat
 
     X_np = numpy.asarray([[1, 2, 3]])
 
@@ -77,7 +72,7 @@ def test_get_namespace_ndarray_with_dispatch():
 
         # In the future, NumPy should become API compliant library and we should have
         # assert xp_out is numpy
-        assert xp_out is array_api_compat.numpy
+        assert xp_out is np_compat
 
 
 @skip_if_array_api_compat_not_configured
@@ -542,7 +537,9 @@ def test_isin(
 def test_get_namespace_and_device():
     # Use torch as a library with custom Device objects:
     torch = pytest.importorskip("torch")
-    xp_torch = pytest.importorskip("array_api_compat.torch")
+
+    from sklearn.externals.array_api_compat import torch as torch_compat
+
     some_torch_tensor = torch.arange(3, device="cpu")
     some_numpy_array = numpy.arange(3)
 
@@ -559,7 +556,7 @@ def test_get_namespace_and_device():
     # wrapper.
     with config_context(array_api_dispatch=True):
         namespace, is_array_api, device = get_namespace_and_device(some_torch_tensor)
-        assert namespace is xp_torch
+        assert namespace is torch_compat
         assert is_array_api
         assert device == some_torch_tensor.device
 
@@ -618,11 +615,8 @@ def test_fill_or_add_to_diagonal(array_namespace, device_, dtype_name, wrap):
 @pytest.mark.parametrize("dispatch", [True, False])
 def test_sparse_device(csr_container, dispatch):
     a, b = csr_container(numpy.array([[1]])), csr_container(numpy.array([[2]]))
-    try:
-        with config_context(array_api_dispatch=dispatch):
-            assert device(a, b) is None
-            assert device(a, numpy.array([1])) == "cpu"
-            assert get_namespace_and_device(a, b)[2] is None
-            assert get_namespace_and_device(a, numpy.array([1]))[2] == "cpu"
-    except ImportError:
-        raise SkipTest("array_api_compat is not installed")
+    with config_context(array_api_dispatch=dispatch):
+        assert device(a, b) is None
+        assert device(a, numpy.array([1])) == "cpu"
+        assert get_namespace_and_device(a, b)[2] is None
+        assert get_namespace_and_device(a, numpy.array([1]))[2] == "cpu"

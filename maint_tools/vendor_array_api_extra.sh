@@ -5,9 +5,10 @@
 set -o nounset
 set -o errexit
 
-VERSION="v0.3.3"
 URL="https://github.com/data-apis/array-api-extra.git"
-ROOT_DIR=sklearn/externals/_array_api_extra
+VERSION="v0.4.0"
+
+ROOT_DIR=sklearn/externals/array_api_extra
 
 rm -rf $ROOT_DIR
 mkdir $ROOT_DIR
