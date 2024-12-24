@@ -317,7 +317,7 @@ def _is_numpydoc():
 try:
     _check_array_api_dispatch(True)
     ARRAY_API_COMPAT_FUNCTIONAL = True
-except ImportError:
+except (ImportError, RuntimeError):
     ARRAY_API_COMPAT_FUNCTIONAL = False
 
 try:
