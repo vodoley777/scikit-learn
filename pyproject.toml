@@ -481,6 +481,3 @@ package = "sklearn"  # name of your package
     [[tool.towncrier.section]]
         name = ":mod:`sklearn.utils`"
         path = "sklearn.utils"
-
-[tool.mypy]
-exclude = ['sklearn/externals']
