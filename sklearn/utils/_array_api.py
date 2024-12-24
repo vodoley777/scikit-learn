@@ -1035,7 +1035,7 @@ def _in1d(ar1, ar2, xp, assume_unique=False, invert=False):
     order = xp.argsort(ar, stable=True)
     reverse_order = xp.argsort(order, stable=True)
     sar = xp.take(ar, order, axis=0)
-    if sar.size >= 1:
+    if size(sar) >= 1:
         bool_ar = sar[1:] != sar[:-1] if invert else sar[1:] == sar[:-1]
     else:
         # indexing undefined in standard when sar is empty
