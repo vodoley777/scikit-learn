@@ -14,10 +14,10 @@ import scipy.sparse as sp
 import scipy.special as special
 
 from .._config import get_config
-from ..externals import _array_api_extra as xpx  # noqa: F401
+from ..externals import array_api_extra as xpx  # noqa: F401
 from .fixes import parse_version
 
-_NUMPY_NAMESPACE_NAMES = {"numpy", "array_api_compat.numpy"}
+_NUMPY_NAMESPACE_NAMES = {"numpy", "sklearn.externals.array_api_compat.numpy"}
 
 
 def yield_namespaces(include_numpy_namespaces=True):
@@ -93,40 +93,34 @@ def _check_array_api_dispatch(array_api_dispatch):
     array_api_compat follows NEP29, which has a higher minimum NumPy version than
     scikit-learn.
     """
-    if array_api_dispatch:
-        try:
-            import array_api_compat  # noqa
-        except ImportError:
-            raise ImportError(
-                "array_api_compat is required to dispatch arrays using the API"
-                " specification"
-            )
+    if not array_api_dispatch:
+        return
 
-        numpy_version = parse_version(numpy.__version__)
-        min_numpy_version = "1.21"
-        if numpy_version < parse_version(min_numpy_version):
-            raise ImportError(
-                f"NumPy must be {min_numpy_version} or newer (found"
-                f" {numpy.__version__}) to dispatch array using"
-                " the array API specification"
-            )
+    numpy_version = parse_version(numpy.__version__)
+    min_numpy_version = "1.21"
+    if numpy_version < parse_version(min_numpy_version):
+        raise ImportError(
+            f"NumPy must be {min_numpy_version} or newer (found"
+            f" {numpy.__version__}) to dispatch array using"
+            " the array API specification"
+        )
 
-        scipy_version = parse_version(scipy.__version__)
-        min_scipy_version = "1.14.0"
-        if scipy_version < parse_version(min_scipy_version):
-            raise ImportError(
-                f"SciPy must be {min_scipy_version} or newer"
-                " (found {scipy.__version__}) to dispatch array using"
-                " the array API specification"
-            )
+    scipy_version = parse_version(scipy.__version__)
+    min_scipy_version = "1.14.0"
+    if scipy_version < parse_version(min_scipy_version):
+        raise ImportError(
+            f"SciPy must be {min_scipy_version} or newer"
+            " (found {scipy.__version__}) to dispatch array using"
+            " the array API specification"
+        )
 
-        if os.environ.get("SCIPY_ARRAY_API") != "1":
-            raise RuntimeError(
-                "Scikit-learn array API support was enabled but scipy's own support is "
-                "not enabled. Please set the SCIPY_ARRAY_API=1 environment variable "
-                "before importing sklearn or scipy. More details at: "
-                "https://docs.scipy.org/doc/scipy/dev/api-dev/array_api.html"
-            )
+    if os.environ.get("SCIPY_ARRAY_API") != "1":
+        raise RuntimeError(
+            "Scikit-learn array API support was enabled but scipy's own support is "
+            "not enabled. Please set the SCIPY_ARRAY_API=1 environment variable "
+            "before importing sklearn or scipy. More details at: "
+            "https://docs.scipy.org/doc/scipy/dev/api-dev/array_api.html"
+        )
 
 
 def _single_array_device(array):
@@ -584,13 +578,9 @@ def get_namespace(*arrays, remove_none=True, remove_types=(str,), xp=None):
 
     _check_array_api_dispatch(array_api_dispatch)
 
-    # array-api-compat is a required dependency of scikit-learn only when
-    # configuring `array_api_dispatch=True`. Its import should therefore be
-    # protected by _check_array_api_dispatch to display an informative error
-    # message in case it is missing.
-    import array_api_compat
+    from sklearn.externals.array_api_compat import get_namespace
 
-    namespace, is_array_api_compliant = array_api_compat.get_namespace(*arrays), True
+    namespace, is_array_api_compliant = get_namespace(*arrays), True
 
     if namespace.__name__ == "array_api_strict" and hasattr(
         namespace, "set_array_api_strict_flags"
@@ -679,14 +669,20 @@ def _fill_or_add_to_diagonal(array, value, xp, add_value=True, wrap=False):
         array_flat[:end:step] = value
 
 
+def _is_xp_namespace(xp, name):
+    return xp.__name__ in (
+        name,
+        f"array_api_compat.{name}",
+        f"sklearn.externals.array_api_compat.{name}",
+    )
+
+
 def _max_precision_float_dtype(xp, device):
     """Return the float dtype with the highest precision supported by the device."""
     # TODO: Update to use `__array_namespace__info__()` from array-api v2023.12
     # when/if that becomes more widespread.
     xp_name = xp.__name__
-    if xp_name in {"array_api_compat.torch", "torch"} and (
-        str(device).startswith("mps")
-    ):  # pragma: no cover
+    if _is_xp_namespace(xp, "torch") and str(device).startswith("mps"):  # pragma: no cover
         return xp.float32
     return xp.float64
 
@@ -875,11 +871,9 @@ def _ravel(array, xp=None):
 
 def _convert_to_numpy(array, xp):
     """Convert X into a NumPy ndarray on the CPU."""
-    xp_name = xp.__name__
-
-    if xp_name in {"array_api_compat.torch", "torch"}:
+    if _is_xp_namespace(xp, "torch"):
         return array.cpu().numpy()
-    elif xp_name in {"array_api_compat.cupy", "cupy"}:  # pragma: nocover
+    elif _is_xp_namespace(xp, "cupy"):  # pragma: nocover
         return array.get()
 
     return numpy.asarray(array)
