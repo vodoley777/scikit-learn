@@ -29,7 +29,6 @@ https://repo.anaconda.com/pkgs/main/linux-64/setuptools-75.1.0-py313h06a4308_0.c
 https://repo.anaconda.com/pkgs/main/linux-64/wheel-0.44.0-py313h06a4308_0.conda#0d8e57ed81bb23b971817beeb3d49606
 https://repo.anaconda.com/pkgs/main/linux-64/pip-24.2-py313h06a4308_0.conda#59f806485e89cb8721847b5857f6df2b
 # pip alabaster @ https://files.pythonhosted.org/packages/7e/b3/6b4067be973ae96ba0d615946e314c5ae35f9f993eca561b356540bb0c2b/alabaster-1.0.0-py3-none-any.whl#sha256=fc6786402dc3fcb2de3cabd5fe455a2db534b371124f1f21de8731783dec828b
-# pip array-api-compat @ https://files.pythonhosted.org/packages/13/1d/2b2d33635de5dbf5e703114c11f1129394e68be16cc4dc5ccc2021a17f7b/array_api_compat-1.9.1-py3-none-any.whl#sha256=41a2703a662832d21619359ddddc5c0449876871f6c01e108c335f2a9432df94
 # pip babel @ https://files.pythonhosted.org/packages/ed/20/bc79bc575ba2e2a7f70e8a1155618bb1301eaa5132a8271373a6903f73f8/babel-2.16.0-py3-none-any.whl#sha256=368b5b98b37c06b7daf6696391c3240c938b37767d4584413e8438c5c435fa8b
 # pip certifi @ https://files.pythonhosted.org/packages/a5/32/8f6669fc4798494966bf446c8c4a162e0b5d893dff088afddf76414f70e1/certifi-2024.12.14-py3-none-any.whl#sha256=1275f7a45be9464efc1173084eaa30f866fe2e47d389406136d332ed4967ec56
 # pip charset-normalizer @ https://files.pythonhosted.org/packages/2b/c9/1c8fe3ce05d30c87eff498592c89015b19fade13df42850aafae09e94f35/charset_normalizer-3.4.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl#sha256=4796efc4faf6b53a18e3d46343535caed491776a22af773f366534056c4e1fbc
