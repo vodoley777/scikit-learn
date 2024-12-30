@@ -59,7 +59,7 @@ fi
 
 if [[ "$PYTEST_XDIST_VERSION" != "none" ]]; then
     XDIST_WORKERS=$(python -c "import joblib; print(joblib.cpu_count(only_physical_cores=True))")
-    TEST_CMD="$TEST_CMD -n$XDIST_WORKERS"
+    TEST_CMD="$TEST_CMD"
 fi
 
 if [[ -n "$SELECTED_TESTS" ]]; then
@@ -75,7 +75,7 @@ else
     echo "Could not inspect CPU architecture."
 fi
 
-TEST_CMD="$TEST_CMD --pyargs sklearn"
+TEST_CMD="SKLEARN_WARNINGS_AS_ERRORS=1 $TEST_CMD --pyargs sklearn"
 
 set -x
 eval "$TEST_CMD"
